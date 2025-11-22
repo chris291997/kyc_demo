@@ -91,7 +91,7 @@ export const CyantechDocumentCapture: React.FC<CyantechDocumentCaptureProps> = (
           <p>{error}</p>
         </div>
       )}
-
+      
       <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ minHeight: '500px' }}>
         {imageSrc ? (
           <div className="relative w-full h-full">

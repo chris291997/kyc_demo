@@ -1,15 +1,43 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, FileText, Users, Zap, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, FileText, Users, Zap, Sparkles, ArrowRight, CheckCircle2, Shield, UserCheck } from 'lucide-react';
 import { createVerificationSession } from '../services/api';
 import ThemeToggle from '../components/ThemeToggle';
+import type { VerificationScenario, VerificationScenarioConfig } from '../types';
 
 function HomePage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedScenario, setSelectedScenario] = useState<VerificationScenario | null>(null);
 
-  const handleStartVerification = async () => {
+  const scenarios: VerificationScenarioConfig[] = [
+    {
+      id: 'full',
+      name: 'Full Verification',
+      description: 'Complete identity verification with document check, face matching, and liveness detection',
+      features: [
+        'Document authenticity check',
+        'Face matching with document photo',
+        'Liveness detection',
+      ],
+      icon: '🛡️',
+      color: 'blue',
+    },
+    {
+      id: 'standard',
+      name: 'Standard Verification',
+      description: 'Document verification and face matching without liveness check',
+      features: [
+        'Document authenticity check',
+        'Face matching with document photo',
+      ],
+      icon: '✅',
+      color: 'green',
+    },
+  ];
+
+  const handleStartVerification = async (scenario: VerificationScenario) => {
     try {
       setLoading(true);
       setError(null);
@@ -17,8 +45,10 @@ function HomePage() {
       // Create a new verification session
       const session = await createVerificationSession();
 
-      // Navigate to verification flow
-      navigate(`/verify/${session.id}`);
+      // Navigate to verification flow with scenario in state
+      navigate(`/verify/${session.id}`, { 
+        state: { scenario } 
+      });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -104,12 +134,16 @@ function HomePage() {
             </div>
           </div>
 
-          {/* CTA Section */}
-          <div className="card max-w-3xl mx-auto text-center bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-gray-800/50 animate-scale-in">
-            <h3 className="text-2xl lg:text-3xl font-bold mb-4 text-gray-900 dark:text-white">Ready to Get Started?</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-8 text-lg">
-              Complete your identity verification in just 3 simple steps
-            </p>
+          {/* Verification Scenario Selection */}
+          <div className="card max-w-5xl mx-auto animate-scale-in">
+            <div className="text-center mb-8">
+              <h3 className="text-2xl lg:text-3xl font-bold mb-4 text-gray-900 dark:text-white">
+                Choose Verification Scenario
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300 text-lg">
+                Select the verification flow that best fits your needs
+              </p>
+            </div>
 
             {error && (
               <div className="bg-red-50 dark:bg-red-900/30 border-2 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-6 py-4 rounded-xl mb-6 animate-slide-down">
@@ -118,36 +152,98 @@ function HomePage() {
               </div>
             )}
 
-            <button
-              onClick={handleStartVerification}
-              disabled={loading}
-              className="btn-primary text-lg px-10 py-4 inline-flex items-center justify-center space-x-2 group"
-            >
-              {loading ? (
-                <>
-                  <div className="loading-spinner"></div>
-                  <span>Creating Session...</span>
-                </>
-              ) : (
-                <>
-                  <span>Start Verification</span>
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {scenarios.map((scenario) => {
+                const isSelected = selectedScenario === scenario.id;
+                const colorClasses = {
+                  blue: {
+                    border: 'border-blue-500',
+                    bg: 'bg-blue-50 dark:bg-blue-900/20',
+                    text: 'text-blue-600 dark:text-blue-400',
+                    button: 'bg-blue-600 hover:bg-blue-700',
+                  },
+                  green: {
+                    border: 'border-green-500',
+                    bg: 'bg-green-50 dark:bg-green-900/20',
+                    text: 'text-green-600 dark:text-green-400',
+                    button: 'bg-green-600 hover:bg-green-700',
+                  },
+                }[scenario.color];
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Fast & Secure</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse animation-delay-100"></div>
-                <span>3-Minute Process</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse animation-delay-200"></div>
-                <span>AI-Powered</span>
+                return (
+                  <div
+                    key={scenario.id}
+                    onClick={() => setSelectedScenario(scenario.id)}
+                    className={`card cursor-pointer transition-all duration-300 hover:scale-105 ${
+                      isSelected
+                        ? `${colorClasses.border} border-4 ${colorClasses.bg}`
+                        : 'border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-start mb-4">
+                      <div className={`text-4xl mr-4 ${isSelected ? colorClasses.text : ''}`}>
+                        {scenario.icon}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">
+                          {scenario.name}
+                        </h4>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                          {scenario.description}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <CheckCircle2 className={`w-6 h-6 ${colorClasses.text}`} />
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2 mb-4">
+                      {scenario.features.map((feature, idx) => (
+                        <div key={idx} className="flex items-center text-sm text-gray-700 dark:text-gray-300">
+                          <div className={`w-1.5 h-1.5 rounded-full mr-2 ${isSelected ? colorClasses.text.replace('text-', 'bg-') : 'bg-gray-400'}`}></div>
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={() => selectedScenario && handleStartVerification(selectedScenario)}
+                disabled={loading || !selectedScenario}
+                className={`${selectedScenario ? scenarios.find(s => s.id === selectedScenario)?.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700' : 'bg-gray-400'} text-white text-lg px-10 py-4 rounded-lg inline-flex items-center justify-center space-x-2 group transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {loading ? (
+                  <>
+                    <div className="loading-spinner"></div>
+                    <span>Creating Session...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{selectedScenario ? 'Start Verification' : 'Select a Scenario'}</span>
+                    {selectedScenario && (
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    )}
+                  </>
+                )}
+              </button>
+
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Fast & Secure</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse animation-delay-100"></div>
+                  <span>AI-Powered</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse animation-delay-200"></div>
+                  <span>Bank-Grade Security</span>
+                </div>
               </div>
             </div>
           </div>

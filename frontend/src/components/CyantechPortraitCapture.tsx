@@ -47,8 +47,8 @@ export const CyantechPortraitCapture: React.FC<CyantechPortraitCaptureProps> = (
           faceComponent.setConfig(settings);
         } else {
           // Fallback to attributes if settings not available
-          faceComponent.setAttribute('locale', 'en');
-          faceComponent.setAttribute('theme', 'light');
+        faceComponent.setAttribute('locale', 'en');
+        faceComponent.setAttribute('theme', 'light');
         }
         
         // Helper function to convert Blob to base64
@@ -96,9 +96,9 @@ export const CyantechPortraitCapture: React.FC<CyantechPortraitCaptureProps> = (
           if (hasCapturedRef.current) {
             return;
           }
-          
-          const { detail } = event;
-          
+            
+            const { detail } = event;
+            
           if (detail && detail.image) {
             try {
               if (detail.image instanceof Blob) {
@@ -112,7 +112,7 @@ export const CyantechPortraitCapture: React.FC<CyantechPortraitCaptureProps> = (
             } catch (err) {
               console.error('Error processing captured image:', err);
               setError('Failed to process captured image');
-            }
+              }
           }
         });
 
@@ -134,7 +134,7 @@ export const CyantechPortraitCapture: React.FC<CyantechPortraitCaptureProps> = (
         });
 
         if (containerRef.current) {
-          containerRef.current.appendChild(faceComponent);
+        containerRef.current.appendChild(faceComponent);
         }
         
         // Set initialized after a short delay if 'ready' event doesn't fire
@@ -156,8 +156,8 @@ export const CyantechPortraitCapture: React.FC<CyantechPortraitCaptureProps> = (
           containerRef.current.removeChild(faceComponentRef.current);
         } catch (err) {
           // Component may have already been removed
-          if (containerRef.current) {
-            containerRef.current.innerHTML = '';
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
           }
         }
       }

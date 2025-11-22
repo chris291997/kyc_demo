@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Upload,
@@ -20,13 +20,17 @@ import CyantechDocumentCapture from '../components/CyantechDocumentCapture';
 import CyantechFaceCapture from '../components/CyantechFaceCapture';
 import CyantechPortraitCapture from '../components/CyantechPortraitCapture';
 import UploadZone from '../components/UploadZone';
-import StepIndicator from '../components/StepIndicator';
 import ThemeToggle from '../components/ThemeToggle';
-import type { VerificationStep } from '../types';
+import type { VerificationStep, VerificationScenario } from '../types';
 
 function VerificationFlow() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get scenario from location state, default to 'full'
+  const scenario: VerificationScenario = (location.state?.scenario as VerificationScenario) || 'full';
+  const includesLiveness = scenario === 'full';
 
   const [currentStep, setCurrentStep] = useState<VerificationStep>('document-upload');
   const [error, setError] = useState<string | null>(null);
@@ -37,8 +41,8 @@ function VerificationFlow() {
   const [livenessResult, setLivenessResult] = useState<any>(null);
   
   // File states
-  const [documentFile, setDocumentFile] = useState<File | null>(null);
-  const [faceFile, setFaceFile] = useState<File | null>(null);
+  const [_documentFile, setDocumentFile] = useState<File | null>(null);
+  const [_faceFile, setFaceFile] = useState<File | null>(null);
   
   // Preview states
   const [documentPreview, setDocumentPreview] = useState<string | null>(null);
@@ -49,7 +53,7 @@ function VerificationFlow() {
   const [showFaceCamera, setShowFaceCamera] = useState(false);
 
   // Query verification session
-  const { data: session, refetch } = useQuery({
+  const { data: _session, refetch } = useQuery({
     queryKey: ['verification', sessionId],
     queryFn: () => getVerificationSession(sessionId!),
     enabled: !!sessionId,
@@ -99,7 +103,15 @@ function VerificationFlow() {
     onSuccess: (data) => {
       setFaceMatchResult(data.face_match_result);
       refetch();
-      setCurrentStep('liveness-check');
+      // Skip liveness if scenario is 'standard'
+      if (includesLiveness) {
+        setCurrentStep('liveness-check');
+      } else {
+        // Add a small delay to ensure data is saved before navigation
+        setTimeout(() => {
+          navigate(`/results/${sessionId}`);
+        }, 500);
+      }
       setError(null);
     },
     onError: (err: Error) => {
@@ -217,7 +229,15 @@ function VerificationFlow() {
               console.log('✅ Face match successful via base64');
               setFaceMatchResult(response.match_result);
               refetch();
-              setCurrentStep('liveness-check');
+              // Skip liveness if scenario is 'standard'
+              if (includesLiveness) {
+                setCurrentStep('liveness-check');
+              } else {
+                // Add a small delay to ensure data is saved before navigation
+                setTimeout(() => {
+                  navigate(`/results/${sessionId}`);
+                }, 500);
+              }
               setError(null);
             })
             .catch(apiErr => {
@@ -231,12 +251,14 @@ function VerificationFlow() {
     }
   };
 
-  const steps = ['Upload Document', 'Face Matching', 'Liveness Check'];
+  const steps = includesLiveness 
+    ? ['Upload Document', 'Face Matching', 'Liveness Check']
+    : ['Upload Document', 'Face Matching'];
   const stepIndex = {
     'document-upload': 0,
     'face-match': 1,
-    'liveness-check': 2,
-    'results': 3,
+    'liveness-check': includesLiveness ? 2 : 1,
+    'results': includesLiveness ? 3 : 2,
   }[currentStep];
 
   const isLoading =
@@ -344,7 +366,7 @@ function VerificationFlow() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Capture Your Document</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 1 of 3</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 1 of {steps.length}</p>
                   </div>
                 </div>
                 {!showDocumentCamera && !documentPreview && (
@@ -420,7 +442,7 @@ function VerificationFlow() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Capture Your Face</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 2 of 3</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 2 of {steps.length}</p>
                   </div>
                 </div>
                 {!showFaceCamera && !facePreview && (
@@ -486,7 +508,7 @@ function VerificationFlow() {
             </div>
           )}
 
-          {currentStep === 'liveness-check' && (
+          {currentStep === 'liveness-check' && includesLiveness && (
             <div>
               <div className="flex items-center mb-6">
                 <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mr-4">
@@ -494,7 +516,7 @@ function VerificationFlow() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Liveness Check</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Final Step - Step 3 of 3</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Final Step - Step {steps.length} of {steps.length}</p>
                 </div>
               </div>
               

@@ -3,11 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   CheckCircle,
   XCircle,
-  FileText,
-  User,
-  Calendar,
-  MapPin,
-  CreditCard,
   ArrowLeft,
   Download,
   Shield,
@@ -17,15 +12,19 @@ import {
 } from 'lucide-react';
 import { getVerificationReport } from '../services/api';
 import ThemeToggle from '../components/ThemeToggle';
+import DocumentResultCard from '../components/DocumentResultCard';
+import FaceMatchCard from '../components/FaceMatchCard';
+import LivenessCard from '../components/LivenessCard';
 
 function ResultsPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
 
-  const { data: report, isLoading } = useQuery({
+  const { data: report, isLoading, error: queryError } = useQuery({
     queryKey: ['report', sessionId],
     queryFn: () => getVerificationReport(sessionId!),
     enabled: !!sessionId,
+    retry: 1,
   });
 
   if (isLoading) {
@@ -39,16 +38,19 @@ function ResultsPage() {
     );
   }
 
-  if (!report) {
+  if (queryError) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
             <XCircle className="w-12 h-12 text-red-600 dark:text-red-400" />
           </div>
-          <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-white">Results Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-300 mb-8">
-            Could not load verification results for this session.
+          <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-white">Error Loading Results</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-2">
+            {queryError instanceof Error ? queryError.message : 'Could not load verification results for this session.'}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
+            Session ID: <span className="font-mono">{sessionId}</span>
           </p>
           <button onClick={() => navigate('/')} className="btn-primary inline-flex items-center">
             <Home className="w-5 h-5 mr-2" />
@@ -59,10 +61,54 @@ function ResultsPage() {
     );
   }
 
+  if (!report) {
+    return (
+      <div className="min-h-screen">
+        <header className="glass-effect sticky top-0 z-50 backdrop-blur-lg border-b border-gray-200/50 dark:border-gray-700/50">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors group"
+              >
+                <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
+                <span className="font-medium">Back to Home</span>
+              </button>
+              <ThemeToggle />
+            </div>
+          </div>
+        </header>
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="text-center max-w-md">
+            <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <XCircle className="w-12 h-12 text-red-600 dark:text-red-400" />
+            </div>
+            <h2 className="text-3xl font-bold mb-4 text-gray-900 dark:text-white">Results Not Found</h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-8">
+              Could not load verification results for this session.
+            </p>
+            <button onClick={() => navigate('/')} className="btn-primary inline-flex items-center">
+              <Home className="w-5 h-5 mr-2" />
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // For standard scenario (no liveness), only check document and face match
+  // For full scenario, check all three
+  // Determine if liveness was actually performed by checking liveness_status
+  // If liveness_status is null/undefined, liveness wasn't performed (standard scenario)
+  // liveness_passed can be false even if liveness wasn't performed (due to default value)
+  const livenessRequired = report.face_data?.liveness_status !== null && 
+                           report.face_data?.liveness_status !== undefined;
+  
   const allChecksPassed =
-    report.verification_checks.document_verified &&
-    report.verification_checks.liveness_passed &&
-    report.verification_checks.face_matched;
+    report.verification_checks?.document_verified &&
+    report.verification_checks?.face_matched &&
+    (!livenessRequired || report.verification_checks?.liveness_passed);
 
   return (
     <div className="min-h-screen">
@@ -137,231 +183,48 @@ function ResultsPage() {
           </div>
         </div>
 
-        {/* Verification Checks */}
-        <div className="card mb-8 animate-fade-in">
-          <h3 className="text-2xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
-            <FileText className="w-7 h-7 mr-3 text-blue-600 dark:text-blue-400" />
-            Verification Checks
-          </h3>
-          <div className="space-y-4">
-            <div className={`flex items-center justify-between p-5 rounded-xl transition-all ${
-              report.verification_checks.document_verified
-                ? 'bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800'
-                : 'bg-gray-50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700'
-            }`}>
-              <span className="font-semibold text-lg text-gray-900 dark:text-white">Document Authentication</span>
-              {report.verification_checks.document_verified ? (
-                <span className="status-badge success flex items-center text-base">
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  Verified
-                </span>
-              ) : (
-                <span className="status-badge error flex items-center text-base">
-                  <XCircle className="w-5 h-5 mr-2" />
-                  Failed
-                </span>
-              )}
-            </div>
-            
-            <div className={`flex items-center justify-between p-5 rounded-xl transition-all ${
-              report.verification_checks.face_matched
-                ? 'bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800'
-                : 'bg-gray-50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700'
-            }`}>
-              <span className="font-semibold text-lg text-gray-900 dark:text-white">Face Matching</span>
-              {report.verification_checks.face_matched ? (
-                <span className="status-badge success flex items-center text-base">
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  Matched ({report.overall_match_score?.toFixed(1) || 'N/A'}%)
-                </span>
-              ) : (
-                <span className="status-badge error flex items-center text-base">
-                  <XCircle className="w-5 h-5 mr-2" />
-                  Not Matched
-                </span>
-              )}
-            </div>
+        {/* Verification Result Cards */}
+        <div className="space-y-6 mb-8">
+          {/* Document Result Card */}
+          {report.verification_checks && (
+            <DocumentResultCard
+              documentData={report.document_data || null}
+              isVerified={report.verification_checks.document_verified || false}
+            />
+          )}
 
-            <div className={`flex items-center justify-between p-5 rounded-xl transition-all ${
-              report.verification_checks.liveness_passed
-                ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800'
-                : 'bg-gray-50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700'
-            }`}>
-              <span className="font-semibold text-lg text-gray-900 dark:text-white">Liveness Detection</span>
-              {report.verification_checks.liveness_passed ? (
-                <span className="status-badge success flex items-center text-base">
-                  <CheckCircle className="w-5 h-5 mr-2" />
-                  Genuine
-                </span>
-              ) : (
-                <span className="status-badge error flex items-center text-base">
-                  <XCircle className="w-5 h-5 mr-2" />
-                  Failed
-                </span>
-              )}
+          {/* Face Match Card */}
+          {report.verification_checks && (
+            <FaceMatchCard
+              faceData={report.face_data || null}
+              documentData={report.document_data || null}
+              isMatched={report.verification_checks.face_matched || false}
+              matchScore={report.overall_match_score || null}
+            />
+          )}
+
+          {/* Liveness Card (only shown if liveness was required) */}
+          {report.verification_checks && livenessRequired && (
+            <LivenessCard
+              faceData={report.face_data || null}
+              isPassed={report.verification_checks.liveness_passed}
+            />
+          )}
+
+          {/* Fallback message if no data available */}
+          {(!report.verification_checks || (!report.document_data && !report.face_data)) && (
+            <div className="card bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800">
+              <div className="text-center py-8">
+                <p className="text-gray-700 dark:text-gray-300 font-medium mb-2">
+                  No verification data available yet.
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Please complete the verification process to see results.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-
-        {/* Document Information */}
-        {report.document_data && (
-          <div className="card mb-8 animate-fade-in">
-            <h3 className="text-2xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
-              <CreditCard className="w-7 h-7 mr-3 text-purple-600 dark:text-purple-400" />
-              Document Information
-            </h3>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Full Name</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {report.document_data.full_name || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Document Number</p>
-                  <p className="font-semibold text-gray-900 dark:text-white font-mono text-sm">
-                    {report.document_data.document_number || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Document Type</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {report.document_data.document_type || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <MapPin className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Nationality</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {report.document_data.nationality || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-5 h-5 text-pink-600 dark:text-pink-400" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Date of Birth</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {report.document_data.date_of_birth
-                      ? new Date(report.document_data.date_of_birth).toLocaleDateString()
-                      : 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-5 h-5 text-red-600 dark:text-red-400" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Expiry Date</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {report.document_data.expiry_date
-                      ? new Date(report.document_data.expiry_date).toLocaleDateString()
-                      : 'N/A'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Authenticity Score */}
-            {report.document_data.authenticity_status && (
-              <div className="mt-8 p-6 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-900/20 rounded-xl border-2 border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="font-bold text-lg text-gray-900 dark:text-white">Authenticity Status</span>
-                  <span
-                    className={`status-badge text-base ${
-                      report.document_data.authenticity_status === 'genuine'
-                        ? 'success'
-                        : 'error'
-                    }`}
-                  >
-                    {report.document_data.authenticity_status.toUpperCase()}
-                  </span>
-                </div>
-                {report.document_data.authenticity_score && (
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="font-medium text-gray-700 dark:text-gray-300">Confidence Score</span>
-                      <span className="font-bold text-gray-900 dark:text-white">{report.document_data.authenticity_score}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                      <div
-                        className={`h-3 rounded-full transition-all ${
-                          report.document_data.authenticity_status === 'genuine'
-                            ? 'bg-gradient-to-r from-green-500 to-emerald-600'
-                            : 'bg-gradient-to-r from-red-500 to-orange-600'
-                        }`}
-                        style={{
-                          width: `${report.document_data.authenticity_score}%`,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Face Verification */}
-        {report.face_data && (
-          <div className="card mb-8 animate-fade-in">
-            <h3 className="text-2xl font-bold mb-6 flex items-center text-gray-900 dark:text-white">
-              <User className="w-7 h-7 mr-3 text-green-600 dark:text-green-400" />
-              Face Verification
-            </h3>
-            <div className="grid sm:grid-cols-2 gap-6">
-              <div className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/10 rounded-xl border-2 border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 font-medium">Liveness Status</p>
-                <p className="font-bold text-2xl text-gray-900 dark:text-white mb-2">
-                  {report.face_data.liveness_status?.toUpperCase() || 'N/A'}
-                </p>
-                {report.face_data.liveness_score && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Score: <span className="font-semibold">{report.face_data.liveness_score.toFixed(2)}</span>
-                  </p>
-                )}
-              </div>
-              
-              <div className="p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/10 rounded-xl border-2 border-purple-200 dark:border-purple-800">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 font-medium">Match Status</p>
-                <p className="font-bold text-2xl text-gray-900 dark:text-white mb-2">
-                  {report.face_data.match_status?.toUpperCase() || 'N/A'}
-                </p>
-                {report.face_data.similarity_score && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Similarity: <span className="font-semibold">{report.face_data.similarity_score.toFixed(2)}%</span>
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Action Buttons */}
         <div className="grid sm:grid-cols-2 gap-4 animate-fade-in">

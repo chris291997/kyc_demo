@@ -138,19 +138,21 @@ export class FaceService {
       // Extract match data
       const matchData = this.extractMatchData(matchResponse);
 
-      // Update face result
+      // Update face result - save selfie image path for preview
       let faceResult = await this.faceRepository.findOne({
         where: { session_id: sessionId },
       });
 
       if (faceResult) {
         Object.assign(faceResult, {
+          selfie_image_path: image2Path, // Save selfie image path for preview
           raw_match_response: matchResponse,
           ...matchData,
         });
       } else {
         faceResult = this.faceRepository.create({
           session_id: sessionId,
+          selfie_image_path: image2Path, // Save selfie image path for preview
           raw_match_response: matchResponse,
           ...matchData,
         });

@@ -29,9 +29,10 @@ export class VerificationSession {
 
   @Column({
     type: 'boolean',
-    default: false,
+    nullable: true,
+    default: null,
   })
-  liveness_passed: boolean;
+  liveness_passed: boolean | null;
 
   @Column({
     type: 'boolean',
