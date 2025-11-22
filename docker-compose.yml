@@ -87,6 +87,7 @@ services:
       - REGULA_FACE_SDK_URL=http://regula-face:8080
       - PORT=4000
       - NODE_ENV=${NODE_ENV:-development}
+      - USE_SYNCHRONIZE=false
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
     volumes:
       - ./backend/src:/app/src

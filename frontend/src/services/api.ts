@@ -9,7 +9,10 @@ import type {
   FaceMatchResponse,
 } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+export const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) {
+  throw new Error('VITE_API_URL environment variable is required. Please set it in your .env file.');
+}
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
@@ -202,6 +205,28 @@ export const matchFacesFromBase64 = async (
     const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
 
     return await matchFacesWithDocument(sessionId, file);
+  } catch (error) {
+    handleApiError(error as AxiosError);
+    throw error;
+  }
+};
+
+export const matchFacesWithBase64 = async (
+  sessionId: string,
+  base64Image: string
+): Promise<FaceMatchResponse> => {
+  try {
+    // Clean base64 string (remove data URL prefix if present)
+    let cleanBase64 = base64Image;
+    if (base64Image.includes(',')) {
+      cleanBase64 = base64Image.split(',')[1];
+    }
+
+    const response = await api.post('/face/match', {
+      sessionId,
+      imageBase64: cleanBase64,
+    });
+    return response.data;
   } catch (error) {
     handleApiError(error as AxiosError);
     throw error;

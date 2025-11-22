@@ -12,6 +12,8 @@ import {
 import {
   getVerificationSession,
   checkLivenessFromBase64,
+  matchFacesWithBase64,
+  API_URL,
 } from '../services/api';
 import api from '../services/api';
 import CyantechDocumentCapture from '../components/CyantechDocumentCapture';
@@ -161,22 +163,71 @@ function VerificationFlow() {
   };
 
   const handleFaceCameraCapture = (images: string[]) => {
-    if (images && images.length > 0) {
-      const base64Image = images[0];
-      setFacePreview(base64Image);
+    console.log('📸 Face camera capture triggered with images:', images);
+    
+    if (!images || images.length === 0) {
+      console.error('❌ No images received from SDK capture');
+      setError('No image captured. Please try again.');
+      return;
+    }
+
+    const base64Image = images[0];
+    console.log('✅ Extracted base64 image, length:', base64Image?.length);
+    
+    // Set preview immediately
+    setFacePreview(base64Image);
+    setShowFaceCamera(false);
+    
+    // Convert base64 to File and submit for face matching (like upload)
+    try {
+      // Handle both data URL format (data:image/...) and plain base64
+      let imageData = base64Image;
+      if (!base64Image.startsWith('data:')) {
+        imageData = `data:image/jpeg;base64,${base64Image}`;
+      }
       
-      fetch(base64Image)
-        .then(res => res.blob())
+      fetch(imageData)
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`Failed to fetch image: ${res.statusText}`);
+          }
+          return res.blob();
+        })
         .then(blob => {
+          console.log('✅ Converted to blob, size:', blob.size);
+          if (blob.size === 0) {
+            throw new Error('Blob is empty');
+          }
           const file = new File([blob], 'face.jpg', { type: 'image/jpeg' });
           setFaceFile(file);
-          setShowFaceCamera(false);
+          console.log('📤 Submitting face image for matching via upload endpoint...');
           faceMutation.mutate(file);
         })
         .catch(err => {
-          console.error('Error converting face image:', err);
-          setError('Failed to process captured image');
+          console.error('❌ Error converting face image to File, trying base64 fallback:', err);
+          // Fallback: try using base64 directly
+          console.log('🔄 Attempting base64 direct submission...');
+          const cleanBase64 = base64Image.includes(',') 
+            ? base64Image.split(',')[1] 
+            : base64Image;
+          
+          // Fallback: try using base64 directly via API
+          matchFacesWithBase64(sessionId!, cleanBase64)
+            .then(response => {
+              console.log('✅ Face match successful via base64');
+              setFaceMatchResult(response.match_result);
+              refetch();
+              setCurrentStep('liveness-check');
+              setError(null);
+            })
+            .catch(apiErr => {
+              console.error('❌ Base64 submission also failed:', apiErr);
+              setError(`Failed to process captured image: ${err.message}`);
+            });
         });
+    } catch (err) {
+      console.error('❌ Error in handleFaceCameraCapture:', err);
+      setError(`Failed to process captured image: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
@@ -688,7 +739,7 @@ function VerificationFlow() {
                               </p>
                               <div className="relative group">
                                 <img 
-                                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${faceMatchResult.authenticity_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.authenticity_image_path}`}
+                                  src={`${API_URL}${faceMatchResult.authenticity_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.authenticity_image_path}`}
                                   alt="Captured Selfie"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
                                   onError={(e) => {
@@ -710,7 +761,7 @@ function VerificationFlow() {
                               </p>
                               <div className="relative group">
                                 <img 
-                                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${faceMatchResult.etalon_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.etalon_image_path}`}
+                                  src={`${API_URL}${faceMatchResult.etalon_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.etalon_image_path}`}
                                   alt="Document Photo"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
                                   onError={(e) => {
