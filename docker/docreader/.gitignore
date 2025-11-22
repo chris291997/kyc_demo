@@ -1,0 +1,6 @@
+# Ignore downloaded .deb packages
+*.deb
+
+# Ignore license files (should be in regula-licenses/)
+*.license
+

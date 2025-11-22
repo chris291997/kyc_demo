@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  regula-docreader:
+    # Build from downloaded .deb package instead of Docker registry
+    # Download package from: https://downloads.regulaforensics.com/repo/ubuntu/pool/stable/r/regula-document-reader-webapi/
+    # See docker/docreader/README.md for instructions
+    build:
+      context: ./docker/docreader
+      dockerfile: Dockerfile
+    image: kyc-docreader:local
+    container_name: kyc-docreader
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./regula-licenses/docreader.license:/opt/regula/document-reader-webapi/regula.license:ro
+      - ./regula-db:/opt/regula/document-reader-webapi/regula-db
+    environment:
+      - workers=2
+      - REGULA.License.License=/opt/regula/document-reader-webapi/regula.license
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - kyc-network
+    
+  regula-face:
+    # Face SDK requires package from Regula (not publicly available)
+    # Contact: support@regulaforensics.com or your sales representative
+    # See docker/facesdk/README.md for instructions
+    build:
+      context: ./docker/facesdk
+      dockerfile: Dockerfile
+    image: kyc-facesdk:local
+    container_name: kyc-facesdk
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./regula-licenses/facesdk.license:/app/facesdk.license:ro
+      - ./docker/facesdk/config.yml:/app/config.yml:ro
+      - ./face-storage:/app/storage
+    environment:
+      - LICENSE_FILE=/app/facesdk.license
+      - CONFIG_FILE=/app/config.yml
+      - STORAGE_ENDPOINT=http://storage:9000
+      - STORAGE_ACCESS_KEY=minioadmin
+      - STORAGE_SECRET_KEY=minioadmin
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=kyc_demo
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - kyc-network
+    
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: kyc-backend
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    environment:
+      - DATABASE_HOST=${DATABASE_HOST:-postgres}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_USER=${DATABASE_USER:-postgres}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-postgres}
+      - DATABASE_NAME=${DATABASE_NAME:-kyc_demo}
+      - REGULA_DOC_READER_URL=http://regula-docreader:8080
+      - REGULA_FACE_SDK_URL=http://regula-face:8080
+      - PORT=4000
+      - NODE_ENV=${NODE_ENV:-development}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/uploads:/app/uploads
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      regula-docreader:
+        condition: service_healthy
+      regula-face:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - kyc-network
+    
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: kyc-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:4000}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - kyc-network
+    stdin_open: true
+    tty: true
+
+  postgres:
+    image: postgres:14
+    container_name: kyc-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=kyc_demo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - kyc-network
+
+  # MinIO Storage for Face SDK Liveness videos
+  storage:
+    image: minio/minio:latest
+    container_name: kyc-storage
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Web Console
+    volumes:
+      - storage-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - kyc-network
+
+networks:
+  kyc-network:
+    driver: bridge
+
+volumes:
+  regula-db-data:
+  face-storage-data:
+  postgres-data:
+  storage-data:
+

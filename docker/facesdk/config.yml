@@ -1,0 +1,44 @@
+# Regula Face SDK Configuration
+# For Advanced: Liveness installation
+
+service:
+  port: 8080
+  host: 0.0.0.0
+
+# License configuration
+license:
+  url: file:///app/facesdk.license
+
+# Storage configuration for liveness videos
+storage:
+  type: s3
+  endpoint: http://storage:9000
+  access_key: minioadmin
+  secret_key: minioadmin
+  bucket: face-liveness
+  region: us-east-1
+  use_ssl: false
+
+# Database configuration
+database:
+  host: postgres
+  port: 5432
+  name: kyc_demo
+  user: postgres
+  password: postgres
+
+# Processing configuration
+processing:
+  workers: 2
+  timeout: 30
+
+# Liveness configuration
+liveness:
+  enabled: true
+  video_retention_days: 30
+
+# Logging
+logging:
+  level: info
+  format: json
+
