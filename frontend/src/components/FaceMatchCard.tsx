@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle, XCircle, User } from 'lucide-react';
 import type { VerificationReport } from '../types';
 import { API_URL } from '../services/api';
+import ImageMagnifier from './ImageMagnifier';
 
 interface FaceMatchCardProps {
   faceData: VerificationReport['face_data'];
@@ -126,35 +127,31 @@ export const FaceMatchCard: React.FC<FaceMatchCardProps> = ({
         </div>
       </div>
 
-      {/* Preview Images - Show uploaded images from /verification/{id}/images endpoint */}
+      {/* Preview Images with Magnifier - Responsive, cropped to portrait */}
       {(documentFaceImageUrl || selfieImageUrl) && (
-        <div className="grid sm:grid-cols-2 gap-4 mb-6">
+        <div className="flex justify-center gap-6 mb-6 flex-wrap">
           {documentFaceImageUrl && (
-            <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 font-medium text-center">Document Photo</p>
-              <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
-                <img 
-                  src={documentFaceImageUrl} 
-                  alt="Document Photo" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
+            <div className="flex-shrink-0">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 font-medium text-center">Document Photo</p>
+              <div className="relative w-48 h-64 sm:w-56 sm:h-72 md:w-64 md:h-80 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-700">
+                <ImageMagnifier
+                  src={documentFaceImageUrl}
+                  alt="Document Photo"
+                  className="w-full h-full"
+                  objectFit="cover"
                 />
               </div>
             </div>
           )}
           {selfieImageUrl && (
-            <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700">
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 font-medium text-center">Selfie Photo</p>
-              <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
-                <img 
-                  src={selfieImageUrl} 
-                  alt="Selfie Photo" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
+            <div className="flex-shrink-0">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 font-medium text-center">Selfie Photo</p>
+              <div className="relative w-48 h-64 sm:w-56 sm:h-72 md:w-64 md:h-80 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-700">
+                <ImageMagnifier
+                  src={selfieImageUrl}
+                  alt="Selfie Photo"
+                  className="w-full h-full"
+                  objectFit="cover"
                 />
               </div>
             </div>

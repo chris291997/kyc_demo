@@ -156,6 +156,32 @@ export const checkLiveness = async (
   }
 };
 
+/**
+ * Store liveness transactionId (new approach - just store transactionId, 
+ * full result will be fetched when generating report)
+ */
+export const storeLivenessTransaction = async (
+  sessionId: string,
+  transactionId: string,
+  tag?: string
+): Promise<{ success: boolean; session_id: string; transaction_id: string; message: string }> => {
+  try {
+    const response = await api.post('/face/liveness/transaction', {
+      sessionId,
+      transactionId,
+      tag,
+    });
+    return response.data;
+  } catch (error) {
+    handleApiError(error as AxiosError);
+    throw error;
+  }
+};
+
+/**
+ * Legacy endpoint - kept for future use
+ * Full liveness check with image processing
+ */
 export const checkLivenessFromBase64 = async (
   sessionId: string,
   imageBase64: string,

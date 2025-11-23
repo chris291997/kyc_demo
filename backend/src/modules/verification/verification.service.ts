@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VerificationSession } from './verification.entity';
 import { CreateVerificationDto } from './dto/create-verification.dto';
 import { UpdateVerificationDto } from './dto/update-verification.dto';
 import { StorageService } from '../storage/storage.service';
+import { FaceService } from '../face/face.service';
 
 @Injectable()
 export class VerificationService {
@@ -12,6 +13,8 @@ export class VerificationService {
     @InjectRepository(VerificationSession)
     private verificationRepository: Repository<VerificationSession>,
     private storageService: StorageService,
+    @Inject(forwardRef(() => FaceService))
+    private faceService: FaceService,
   ) {}
 
   async create(
@@ -66,7 +69,40 @@ export class VerificationService {
     const verification = await this.findOne(id);
 
     const documentResult = verification.document_results?.[0];
-    const faceResult = verification.face_results?.[0];
+    let faceResult = verification.face_results?.[0];
+
+    // If liveness data is missing but transactionId exists, fetch from Regula API
+    if (faceResult && (!faceResult.liveness_status || faceResult.liveness_status === null) && faceResult.liveness_transaction_id) {
+      console.log(`🔍 Liveness data missing but transactionId exists (${faceResult.liveness_transaction_id}), fetching from Regula API...`);
+      try {
+        // Fetch full liveness result from Regula API
+        const livenessData = await this.faceService.fetchLivenessFromTransactionId(faceResult.liveness_transaction_id);
+        
+        // Extract and save liveness data
+        const extractedData = this.faceService.extractLivenessDataPublic(livenessData);
+        
+        // Update face result with fetched data
+        // The extractLivenessData already handles all the new fields, so we just merge
+        Object.assign(faceResult, {
+          ...extractedData,
+          raw_liveness_response: livenessData,
+        });
+        
+        // Save updated face result using FaceService method
+        await this.faceService.saveFaceResult(faceResult);
+        
+        // Update verification session
+        await this.update(id, {
+          liveness_passed: extractedData.liveness_status === 'genuine',
+          status: 'completed',
+        });
+        
+        console.log('✅ Fetched and saved liveness data from Regula API');
+      } catch (error) {
+        console.error('❌ Failed to fetch liveness data from Regula API:', error.message);
+        // Continue with existing faceResult even if fetch fails
+      }
+    }
 
     return {
       session_id: verification.id,
@@ -113,6 +149,14 @@ export class VerificationService {
         ? {
             liveness_status: faceResult.liveness_status,
             liveness_score: faceResult.liveness_score,
+            liveness_confidence: faceResult.liveness_confidence,
+            liveness_transaction_id: faceResult.liveness_transaction_id,
+            liveness_tag: faceResult.liveness_tag,
+            liveness_type: faceResult.liveness_type,
+            liveness_estimated_age: faceResult.liveness_estimated_age,
+            liveness_code: faceResult.liveness_code,
+            liveness_metadata: faceResult.liveness_metadata,
+            liveness_images: faceResult.liveness_images,
             match_status: faceResult.match_status,
             match_score: faceResult.match_score,
             similarity_score: faceResult.similarity_score,

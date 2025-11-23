@@ -105,7 +105,7 @@ function VerificationFlow() {
       refetch();
       // Skip liveness if scenario is 'standard'
       if (includesLiveness) {
-        setCurrentStep('liveness-check');
+      setCurrentStep('liveness-check');
       } else {
         // Add a small delay to ensure data is saved before navigation
         setTimeout(() => {
@@ -119,17 +119,22 @@ function VerificationFlow() {
     },
   });
 
-  // Liveness check mutation
+  // Liveness check mutation - sends complete liveness result from SDK
   const livenessMutation = useMutation({
-    mutationFn: (data: { imageData: string; livenessResult?: any }) =>
-      checkLivenessFromBase64(sessionId!, data.imageData, data.livenessResult),
+    mutationFn: (data: { imageData: string; livenessResult: any }) => {
+      return checkLivenessFromBase64(sessionId!, data.imageData, data.livenessResult);
+    },
     onSuccess: (data) => {
       setLivenessResult(data);
-      refetch();
+      refetch().then(() => {
+        setTimeout(() => {
       navigate(`/results/${sessionId}`);
+        }, 1000);
+      });
     },
     onError: (err: Error) => {
-      setError(err.message);
+      console.error('Failed to save liveness result:', err);
+      setError(`Failed to save liveness result: ${err.message}`);
     },
   });
 
@@ -161,6 +166,13 @@ function VerificationFlow() {
   };
 
   const handleLivenessCapture = (imageData: string, livenessResult?: any) => {
+    if (!livenessResult) {
+      console.error('No liveness result received from SDK');
+      setError('Liveness check completed but no result data. Please try again.');
+      return;
+    }
+    
+    setLivenessResult(livenessResult);
     livenessMutation.mutate({ imageData, livenessResult });
   };
 
@@ -183,13 +195,13 @@ function VerificationFlow() {
       return;
     }
 
-    const base64Image = images[0];
+      const base64Image = images[0];
     console.log('✅ Extracted base64 image, length:', base64Image?.length);
     
     // Set preview immediately
-    setFacePreview(base64Image);
+      setFacePreview(base64Image);
     setShowFaceCamera(false);
-    
+      
     // Convert base64 to File and submit for face matching (like upload)
     try {
       // Handle both data URL format (data:image/...) and plain base64
@@ -268,17 +280,17 @@ function VerificationFlow() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
+        {/* Header */}
       <header className="glass-effect sticky top-0 z-50 backdrop-blur-lg border-b border-gray-200/50 dark:border-gray-700/50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => navigate('/')}
+          <button
+            onClick={() => navigate('/')}
               className="flex items-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors group"
-            >
+          >
               <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
               <span className="font-medium">Back to Home</span>
-            </button>
+          </button>
             <ThemeToggle />
           </div>
         </div>
@@ -294,8 +306,8 @@ function VerificationFlow() {
               </div>
               <div>
                 <h1 className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
-                  Identity Verification
-                </h1>
+            Identity Verification
+          </h1>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   Session: <span className="font-mono">{sessionId}</span>
                 </p>
@@ -517,7 +529,7 @@ function VerificationFlow() {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Liveness Check</h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Final Step - Step {steps.length} of {steps.length}</p>
-                </div>
+        </div>
               </div>
               
               <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 mb-6">
@@ -542,8 +554,8 @@ function VerificationFlow() {
                     Verifying liveness...
                   </span>
                 </div>
-              )}
-            </div>
+                )}
+              </div>
           )}
             </div>
           </div>
@@ -553,45 +565,45 @@ function VerificationFlow() {
             <div className="flex-1 lg:w-1/3 lg:sticky lg:top-6 lg:self-start">
               <div className="space-y-4 lg:space-y-4">
                 {/* Document Results */}
-                {documentResult && (
+          {documentResult && (
                   <div className="card bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-4">
                       <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       <h3 className="text-lg font-bold text-blue-900 dark:text-blue-300">Document Processed</h3>
-                    </div>
+              </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                      {documentResult.full_name && (
+                {documentResult.full_name && (
                         <div className="col-span-1">
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Full Name:</span>
                           <p className="text-gray-900 dark:text-white text-sm font-bold mt-1">{documentResult.full_name}</p>
-                        </div>
-                      )}
-                      {documentResult.given_names && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.given_names && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Given Names:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.given_names}</p>
-                        </div>
-                      )}
-                      {documentResult.surname && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.surname && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Surname:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.surname}</p>
-                        </div>
-                      )}
-                      {documentResult.document_number && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.document_number && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Document Number:</span>
                           <p className="text-gray-900 dark:text-white font-mono text-xs mt-1">{documentResult.document_number}</p>
-                        </div>
-                      )}
-                      {documentResult.document_type && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.document_type && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Document Type:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.document_type}</p>
-                        </div>
-                      )}
-                      {documentResult.nationality && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.nationality && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Nationality:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.nationality}</p>
                         </div>
@@ -608,77 +620,77 @@ function VerificationFlow() {
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Gender:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.gender}</p>
-                        </div>
-                      )}
-                      {documentResult.issuing_country && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.issuing_country && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing Country:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_country}</p>
-                        </div>
-                      )}
-                      {documentResult.age && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.age && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Age:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.age} years</p>
-                        </div>
-                      )}
-                      {documentResult.issue_date && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.issue_date && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issue Date:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">
                             {new Date(documentResult.issue_date).toLocaleDateString()}
                           </p>
-                        </div>
-                      )}
-                      {documentResult.expiry_date && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.expiry_date && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Expiry Date:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">
                             {new Date(documentResult.expiry_date).toLocaleDateString()}
                           </p>
-                        </div>
-                      )}
-                      {documentResult.place_of_birth && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.place_of_birth && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Place of Birth:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.place_of_birth}</p>
-                        </div>
-                      )}
-                      {documentResult.personal_number && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.personal_number && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Personal Number:</span>
                           <p className="text-gray-900 dark:text-white font-mono text-xs mt-1">{documentResult.personal_number}</p>
-                        </div>
-                      )}
-                      {documentResult.address && (
+                  </div>
+                )}
+                {documentResult.address && (
                         <div className="col-span-1">
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Address:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.address}</p>
-                        </div>
-                      )}
+                  </div>
+                )}
                 </div>
 
                     {/* Authenticity Status */}
                     {documentResult.authenticity_status && (
                       <div className="mt-4 pt-4 border-t border-blue-300 dark:border-blue-800">
                         <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Authenticity:</span>
-                        <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1">
                           <p className={`font-bold text-sm ${
-                            documentResult.authenticity_status === 'genuine' 
+                      documentResult.authenticity_status === 'genuine' 
                               ? 'text-green-600 dark:text-green-400' 
-                              : documentResult.authenticity_status === 'fake'
+                        : documentResult.authenticity_status === 'fake'
                               ? 'text-red-600 dark:text-red-400'
                               : 'text-yellow-600 dark:text-yellow-400'
-                          }`}>
-                            {documentResult.authenticity_status?.toUpperCase() || 'UNKNOWN'}
-                          </p>
-                          {documentResult.authenticity_score && (
+                    }`}>
+                      {documentResult.authenticity_status?.toUpperCase() || 'UNKNOWN'}
+                    </p>
+                    {documentResult.authenticity_score && (
                             <span className="text-xs text-gray-600 dark:text-gray-400">
                               ({documentResult.authenticity_score}%)
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      </span>
+                    )}
+                  </div>
+                </div>
                     )}
 
                 {/* MRZ and Barcode Verification */}
@@ -699,56 +711,56 @@ function VerificationFlow() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
+          )}
 
                 {/* Face Match Results */}
-                {faceMatchResult && (
+          {faceMatchResult && (
                   <div className="card bg-purple-50 dark:bg-purple-900/10 border-2 border-purple-200 dark:border-purple-800">
-                    <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-4">
                       <CheckCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                       <h3 className="text-lg font-bold text-purple-900 dark:text-purple-300">Face Matched</h3>
-                    </div>
+              </div>
                     <div className="grid grid-cols-1 gap-3">
-                      <div>
+                <div>
                         <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Match Status:</span>
                         <p className={`font-bold text-sm mt-1 ${
-                          faceMatchResult.status === 'match' 
+                    faceMatchResult.status === 'match' 
                             ? 'text-green-600 dark:text-green-400' 
                             : 'text-red-600 dark:text-red-400'
-                        }`}>
-                          {faceMatchResult.status === 'match' ? '✓ MATCH' : '✗ NO MATCH'}
-                        </p>
-                      </div>
-                      {faceMatchResult.match_score !== undefined && faceMatchResult.match_score !== null && (
+                  }`}>
+                    {faceMatchResult.status === 'match' ? '✓ MATCH' : '✗ NO MATCH'}
+                  </p>
+                </div>
+                {faceMatchResult.match_score !== undefined && faceMatchResult.match_score !== null && (
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Match Score:</span>
                           <div className="flex items-center gap-2 mt-1">
                             <p className="text-gray-900 dark:text-white font-bold text-sm">
-                              {faceMatchResult.match_score.toFixed(1)}%
-                            </p>
+                        {faceMatchResult.match_score.toFixed(1)}%
+                      </p>
                             <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div 
+                        <div 
                                 className={`h-2 rounded-full transition-all ${
-                                  faceMatchResult.match_score >= 75 
+                            faceMatchResult.match_score >= 75 
                                     ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
-                                    : faceMatchResult.match_score >= 50
+                              : faceMatchResult.match_score >= 50
                                     ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
                                     : 'bg-gradient-to-r from-red-500 to-red-600'
-                                }`}
-                                style={{ width: `${Math.min(faceMatchResult.match_score, 100)}%` }}
-                              ></div>
-                            </div>
-                          </div>
+                          }`}
+                          style={{ width: `${Math.min(faceMatchResult.match_score, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Threshold: 75%
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    </p>
+                  </div>
+                )}
+              </div>
 
-                    {/* Authenticity Images Preview */}
-                    {(faceMatchResult.etalon_image_path || faceMatchResult.authenticity_image_path) && (
+              {/* Authenticity Images Preview */}
+              {(faceMatchResult.etalon_image_path || faceMatchResult.authenticity_image_path) && (
                       <div className="mt-4 pt-4 border-t border-purple-300 dark:border-purple-800">
                         <h4 className="text-xs font-bold text-purple-900 dark:text-purple-300 mb-2">
                           📸 Comparison
@@ -760,22 +772,22 @@ function VerificationFlow() {
                                 DOCUMENT
                               </p>
                               <div className="relative group">
-                                <img 
+                        <img 
                                   src={`${API_URL}${faceMatchResult.authenticity_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.authenticity_image_path}`}
                                   alt="Captured Selfie"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
-                                  onError={(e) => {
+                          onError={(e) => {
                                     console.error('Failed to load authenticity image:', faceMatchResult.authenticity_image_path);
-                                    e.currentTarget.style.display = 'none';
+                            e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
                                       parent.innerHTML = '<div class="w-full aspect-square rounded-lg border border-dashed border-purple-300 dark:border-purple-700 flex items-center justify-center bg-purple-100 dark:bg-purple-900/20"><span class="text-xs text-gray-500 dark:text-gray-400">N/A</span></div>';
                                     }
-                                  }}
-                                />
+                          }}
+                        />
                               </div>
-                            </div>
-                          )}
+                      </div>
+                    )}
                           {faceMatchResult.etalon_image_path && (
                             <div className="space-y-1">
                               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide text-[10px]">
@@ -786,20 +798,131 @@ function VerificationFlow() {
                                   src={`${API_URL}${faceMatchResult.etalon_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.etalon_image_path}`}
                                   alt="Document Photo"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
-                                  onError={(e) => {
+                          onError={(e) => {
                                     console.error('Failed to load etalon image:', faceMatchResult.etalon_image_path);
-                                    e.currentTarget.style.display = 'none';
+                            e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
                                       parent.innerHTML = '<div class="w-full aspect-square rounded-lg border border-dashed border-purple-300 dark:border-purple-700 flex items-center justify-center bg-purple-100 dark:bg-purple-900/20"><span class="text-xs text-gray-500 dark:text-gray-400">N/A</span></div>';
                                     }
-                                  }}
-                                />
+                          }}
+                        />
                               </div>
-                            </div>
-                          )}
-                        </div>
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+                {/* Liveness Detection Results */}
+          {livenessResult && (
+                  <div className="card bg-green-50 dark:bg-green-900/10 border-2 border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2 mb-4">
+                      <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <h3 className="text-lg font-bold text-green-900 dark:text-green-300">Liveness Detection</h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {/* Liveness Status */}
+                      {livenessResult.liveness_status && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Liveness Status:</span>
+                          <p className={`font-bold text-sm mt-1 ${
+                            livenessResult.liveness_status === 'genuine' 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : livenessResult.liveness_status === 'spoof'
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-yellow-600 dark:text-yellow-400'
+                          }`}>
+                            {livenessResult.liveness_status === 'genuine' ? '✓ LIVE PERSON' : 
+                             livenessResult.liveness_status === 'spoof' ? '✗ SPOOF DETECTED' : 
+                             '? UNKNOWN'}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Liveness Score */}
+                      {livenessResult.liveness_score !== undefined && livenessResult.liveness_score !== null && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Liveness Score:</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-gray-900 dark:text-white font-bold text-sm">
+                              {(livenessResult.liveness_score * 100).toFixed(1)}%
+                            </p>
+                            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full transition-all ${
+                                  livenessResult.liveness_score >= 0.75
+                                    ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                                    : livenessResult.liveness_score >= 0.5
+                                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                                    : 'bg-gradient-to-r from-red-500 to-red-600'
+                                }`}
+                                style={{ width: `${Math.min(livenessResult.liveness_score * 100, 100)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Liveness Confidence */}
+                      {livenessResult.liveness_confidence !== undefined && livenessResult.liveness_confidence !== null && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Confidence:</span>
+                          <p className="text-gray-900 dark:text-white font-bold text-sm mt-1">
+                            {(livenessResult.liveness_confidence * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Liveness Code */}
+                      {livenessResult.liveness_code !== undefined && livenessResult.liveness_code !== null && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Result Code:</span>
+                          <p className={`font-mono text-sm mt-1 ${
+                            livenessResult.liveness_code === 0 
+                              ? 'text-green-600 dark:text-green-400 font-bold' 
+                              : 'text-red-600 dark:text-red-400 font-bold'
+                          }`}>
+                            {livenessResult.liveness_code} {livenessResult.liveness_code === 0 ? '(Success)' : '(Failed)'}
+                          </p>
+              </div>
+                      )}
+
+                      {/* Estimated Age */}
+                      {livenessResult.liveness_estimated_age !== undefined && livenessResult.liveness_estimated_age !== null && (
+                <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Estimated Age:</span>
+                          <p className="text-gray-900 dark:text-white font-semibold text-sm mt-1">
+                            {livenessResult.liveness_estimated_age} years
+                          </p>
+                </div>
+                      )}
+
+                      {/* Transaction ID */}
+                      {livenessResult.liveness_transaction_id && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Transaction ID:</span>
+                          <p className="text-gray-900 dark:text-white font-mono text-[10px] mt-1 break-all">
+                            {livenessResult.liveness_transaction_id}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Technical Details (Collapsible) */}
+                    {livenessResult.liveness_metadata && (
+                      <details className="mt-4 pt-4 border-t border-green-300 dark:border-green-800">
+                        <summary className="text-xs font-bold text-green-900 dark:text-green-300 mb-2 cursor-pointer hover:text-green-700 dark:hover:text-green-200">
+                          🔧 Technical Details
+                        </summary>
+                        <div className="mt-2 p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                          <pre className="text-[10px] text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap break-words">
+                            {JSON.stringify(livenessResult.liveness_metadata, null, 2)}
+                          </pre>
+                        </div>
+                      </details>
                     )}
                   </div>
                 )}

@@ -526,6 +526,7 @@ docker-compose logs --tail=100 >> debug.txt
    - [INSTALLATION.md](./INSTALLATION.md) - Complete installation guide
    - [QUICK_START.md](./QUICK_START.md) - Quick reference
    - [README.md](./README.md) - Project overview
+   - [LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md) - Liveness detection guide
 
 2. **Regula Support**:
    - Email: support@regulaforensics.com

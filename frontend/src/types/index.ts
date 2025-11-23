@@ -100,6 +100,20 @@ export interface VerificationReport {
   face_data: {
     liveness_status: string | null;
     liveness_score: number | string | null;
+    liveness_confidence: number | string | null;
+    liveness_transaction_id: string | null;
+    liveness_tag: string | null;
+    liveness_type: number | null;
+    liveness_estimated_age: number | null;
+    liveness_code: number | null;
+    liveness_metadata: {
+      elapsedTime?: number;
+      serverTime?: string;
+      ctx?: {
+        userIp?: string;
+      };
+    } | null;
+    liveness_images: string[] | null;
     match_status: string | null;
     match_score: number | string | null;
     similarity_score: number | string | null;

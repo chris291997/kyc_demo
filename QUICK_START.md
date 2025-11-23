@@ -167,6 +167,7 @@ You're ready when:
 ## 📚 Next Steps
 
 - **Detailed Setup**: See [INSTALLATION.md](./INSTALLATION.md)
+- **Liveness Guide**: See [LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md)
 - **Troubleshooting**: See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
 - **Architecture**: See [system-requirements.md](./system-requirements.md)
 - **API Docs**: See [backend/README.md](./backend/README.md)

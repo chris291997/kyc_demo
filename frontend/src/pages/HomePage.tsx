@@ -142,7 +142,7 @@ function HomePage() {
               </h3>
               <p className="text-gray-600 dark:text-gray-300 text-lg">
                 Select the verification flow that best fits your needs
-              </p>
+            </p>
             </div>
 
             {error && (
@@ -211,37 +211,37 @@ function HomePage() {
             </div>
 
             <div className="text-center">
-              <button
+            <button
                 onClick={() => selectedScenario && handleStartVerification(selectedScenario)}
                 disabled={loading || !selectedScenario}
                 className={`${selectedScenario ? scenarios.find(s => s.id === selectedScenario)?.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700' : 'bg-gray-400'} text-white text-lg px-10 py-4 rounded-lg inline-flex items-center justify-center space-x-2 group transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {loading ? (
-                  <>
-                    <div className="loading-spinner"></div>
-                    <span>Creating Session...</span>
-                  </>
-                ) : (
-                  <>
+            >
+              {loading ? (
+                <>
+                  <div className="loading-spinner"></div>
+                  <span>Creating Session...</span>
+                </>
+              ) : (
+                <>
                     <span>{selectedScenario ? 'Start Verification' : 'Select a Scenario'}</span>
                     {selectedScenario && (
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     )}
-                  </>
-                )}
-              </button>
+                </>
+              )}
+            </button>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-400">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>Fast & Secure</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse animation-delay-100"></div>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>Fast & Secure</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse animation-delay-100"></div>
                   <span>AI-Powered</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse animation-delay-200"></div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse animation-delay-200"></div>
                   <span>Bank-Grade Security</span>
                 </div>
               </div>

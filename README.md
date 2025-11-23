@@ -36,15 +36,12 @@ docker-compose up -d --build
 - **Document Verification**: Validate government-issued IDs (passports, licenses, national IDs)
 - **Data Extraction**: Automatically extract name, DOB, document number, nationality, etc.
 - **Authenticity Validation**: Check MRZ, barcodes, security features
-- **Modern UI**: Responsive React interface with step-by-step flow
-- **Database Storage**: PostgreSQL for verification records
+- **Face Liveness Detection**: Real-time spoof detection and liveness verification
+- **Face Matching**: Compare document photo with live selfie
+- **Modern UI**: Elegant, responsive interface with light/dark theme
+- **Database Storage**: PostgreSQL with comprehensive migrations
 - **REST API**: Complete NestJS backend
-
-### ⚠️ Requires Additional Setup
-- **Face Liveness Detection**: Requires Face SDK package from Regula
-- **Face Matching**: Requires Face SDK package from Regula
-
-Contact Regula support@regulaforensics.com with license OL113415 to obtain Face SDK.
+- **Image Display**: Document and liveness frames displayed in results
 
 ---
 
@@ -83,19 +80,25 @@ Contact Regula support@regulaforensics.com with license OL113415 to obtain Face 
 
 ## 📚 Documentation
 
+📖 **[DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)** - Complete documentation guide
+
 ### Getting Started
 - **[QUICK_START.md](./QUICK_START.md)** - Fast 3-step setup guide
 - **[INSTALLATION.md](./INSTALLATION.md)** - Complete installation walkthrough
 
-### Integration Guides
+### Integration & Setup
 - **[REGULA_SDK_INTEGRATION.md](./REGULA_SDK_INTEGRATION.md)** - Regula SDK integration guide
 - **[FACE_SDK_SETUP.md](./FACE_SDK_SETUP.md)** - Face SDK specific setup instructions
 - **[MIGRATIONS_SETUP.md](./MIGRATIONS_SETUP.md)** - Database migrations guide
 
-### Support & Troubleshooting
-- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
+### Liveness Detection
+- **[LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md)** - Complete liveness detection guide
+- **[LIVENESS_SPOOF_DETECTION.md](./LIVENESS_SPOOF_DETECTION.md)** - Understanding spoof detection
+- **[ARCHITECTURE_DECISION_LIVENESS.md](./ARCHITECTURE_DECISION_LIVENESS.md)** - Liveness architecture decisions
 
-### Additional Resources
+### Support & Reference
+- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
+- **[system-requirements.md](./system-requirements.md)** - Technical specifications
 - **[backend/README.md](./backend/README.md)** - Backend API documentation
 - **[frontend/README.md](./frontend/README.md)** - Frontend documentation
 
@@ -243,6 +246,15 @@ MIT License
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: November 21, 2025  
+**Version**: 2.0.0  
+**Last Updated**: November 22, 2025  
 **Status**: Production Ready ✅
+
+### Recent Updates
+- ✅ Complete UI/UX redesign with light/dark theme
+- ✅ Liveness detection fully integrated and working
+- ✅ Face matching with document photos
+- ✅ Comprehensive liveness data display
+- ✅ Document images shown in results
+- ✅ Database migrations configured
+- ✅ All services operational

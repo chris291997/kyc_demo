@@ -263,7 +263,7 @@ export class DocumentService {
         // Create face result - only set match_score and similarity_score if we have actual values
         const faceResult = faceResultRepo.create({
           session_id: sessionId,
-          match_status: matchScore > 0 && matchScore >= 75 ? 'match' : 'no_match',
+          match_status: matchScore > 0 && matchScore >= 75 ? 'matched' : 'not_matched',
           match_score: matchScore > 0 ? matchScore : null,
           similarity_score: similarity > 0 ? similarity : null,
           selfie_image_path: portraitPath,

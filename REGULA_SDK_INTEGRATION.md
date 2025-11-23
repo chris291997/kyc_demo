@@ -390,9 +390,15 @@ interface RegulaFaceCaptureProps {
 - [Face SDK Web Service](https://docs.regulaforensics.com/develop/face-sdk/web-service/)
 - [Document Reader Web Service](https://docs.regulaforensics.com/develop/document-reader-sdk/web-service/)
 
+### Project Documentation
+- [LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md) - Complete liveness detection guide
+- [LIVENESS_SPOOF_DETECTION.md](./LIVENESS_SPOOF_DETECTION.md) - Understanding spoof detection
+- [ARCHITECTURE_DECISION_LIVENESS.md](./ARCHITECTURE_DECISION_LIVENESS.md) - Liveness architecture
+
 ### Project Files
 - `frontend/src/components/RegulaDocumentCapture.tsx`
 - `frontend/src/components/RegulaFaceCapture.tsx`
+- `frontend/src/components/CyantechFaceCapture.tsx`
 - `frontend/src/pages/VerificationFlow.tsx`
 - `frontend/src/types/regula.d.ts`
 

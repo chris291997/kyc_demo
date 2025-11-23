@@ -104,7 +104,7 @@ function ResultsPage() {
   // liveness_passed can be false even if liveness wasn't performed (due to default value)
   const livenessRequired = report.face_data?.liveness_status !== null && 
                            report.face_data?.liveness_status !== undefined;
-  
+
   const allChecksPassed =
     report.verification_checks?.document_verified &&
     report.verification_checks?.face_matched &&
@@ -191,7 +191,7 @@ function ResultsPage() {
               documentData={report.document_data || null}
               isVerified={report.verification_checks.document_verified || false}
             />
-          )}
+              )}
 
           {/* Face Match Card */}
           {report.verification_checks && (
@@ -218,13 +218,13 @@ function ResultsPage() {
                 <p className="text-gray-700 dark:text-gray-300 font-medium mb-2">
                   No verification data available yet.
                 </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                   Please complete the verification process to see results.
                 </p>
               </div>
             </div>
           )}
-        </div>
+          </div>
 
         {/* Action Buttons */}
         <div className="grid sm:grid-cols-2 gap-4 animate-fade-in">
