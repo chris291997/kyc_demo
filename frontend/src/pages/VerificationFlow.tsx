@@ -31,8 +31,11 @@ function VerificationFlow() {
   // Get scenario from location state, default to 'full'
   const scenario: VerificationScenario = (location.state?.scenario as VerificationScenario) || 'full';
   const includesLiveness = scenario === 'full';
+  const isLivenessFirst = scenario === 'liveness-first';
 
-  const [currentStep, setCurrentStep] = useState<VerificationStep>('document-upload');
+  const [currentStep, setCurrentStep] = useState<VerificationStep>(
+    isLivenessFirst ? 'liveness-check' : 'document-upload'
+  );
   const [error, setError] = useState<string | null>(null);
   
   // Results state
@@ -43,6 +46,7 @@ function VerificationFlow() {
   // File states
   const [_documentFile, setDocumentFile] = useState<File | null>(null);
   const [_faceFile, setFaceFile] = useState<File | null>(null);
+  const [livenessImageData, setLivenessImageData] = useState<string | null>(null);
   
   // Preview states
   const [documentPreview, setDocumentPreview] = useState<string | null>(null);
@@ -74,11 +78,27 @@ function VerificationFlow() {
       
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setDocumentResult(data.document_result);
       refetch();
-      setCurrentStep('face-match');
-      setError(null);
+      
+      if (isLivenessFirst && livenessImageData) {
+        try {
+          const livenessBlob = await fetch(livenessImageData).then(res => res.blob());
+          const livenessFile = new File([livenessBlob], 'liveness-portrait.jpg', { type: 'image/jpeg' });
+          await faceMutation.mutateAsync(livenessFile);
+        } catch (err) {
+          setError(`Failed to process liveness portrait: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      } else {
+        if (!isLivenessFirst) {
+          setCurrentStep('face-match');
+        }
+      }
+      
+      if (!isLivenessFirst || !livenessImageData) {
+        setError(null);
+      }
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -103,9 +123,15 @@ function VerificationFlow() {
     onSuccess: (data) => {
       setFaceMatchResult(data.face_match_result);
       refetch();
+      
+      if (isLivenessFirst) {
+        setTimeout(() => {
+          navigate(`/results/${sessionId}`);
+        }, 500);
+      }
       // Skip liveness if scenario is 'standard'
-      if (includesLiveness) {
-      setCurrentStep('liveness-check');
+      else if (includesLiveness) {
+        setCurrentStep('liveness-check');
       } else {
         // Add a small delay to ensure data is saved before navigation
         setTimeout(() => {
@@ -127,13 +153,18 @@ function VerificationFlow() {
     onSuccess: (data) => {
       setLivenessResult(data);
       refetch().then(() => {
-        setTimeout(() => {
-      navigate(`/results/${sessionId}`);
-        }, 1000);
+        // For liveness-first scenario, move to document upload with the liveness image
+        if (isLivenessFirst) {
+          setCurrentStep('document-upload');
+        } else {
+          // For full scenario, go to results
+          setTimeout(() => {
+            navigate(`/results/${sessionId}`);
+          }, 1000);
+        }
       });
     },
     onError: (err: Error) => {
-      console.error('Failed to save liveness result:', err);
       setError(`Failed to save liveness result: ${err.message}`);
     },
   });
@@ -158,8 +189,7 @@ function VerificationFlow() {
           handleDocumentUpload(file);
           setShowDocumentCamera(false);
         })
-        .catch(err => {
-          console.error('Error converting image:', err);
+        .catch(() => {
           setError('Failed to process captured image');
         });
     }
@@ -167,12 +197,17 @@ function VerificationFlow() {
 
   const handleLivenessCapture = (imageData: string, livenessResult?: any) => {
     if (!livenessResult) {
-      console.error('No liveness result received from SDK');
       setError('Liveness check completed but no result data. Please try again.');
       return;
     }
     
     setLivenessResult(livenessResult);
+    
+    if (isLivenessFirst) {
+      setLivenessImageData(imageData);
+      setFacePreview(imageData);
+    }
+    
     livenessMutation.mutate({ imageData, livenessResult });
   };
 
@@ -187,24 +222,16 @@ function VerificationFlow() {
   };
 
   const handleFaceCameraCapture = (images: string[]) => {
-    console.log('📸 Face camera capture triggered with images:', images);
-    
     if (!images || images.length === 0) {
-      console.error('❌ No images received from SDK capture');
       setError('No image captured. Please try again.');
       return;
     }
 
       const base64Image = images[0];
-    console.log('✅ Extracted base64 image, length:', base64Image?.length);
-    
-    // Set preview immediately
       setFacePreview(base64Image);
     setShowFaceCamera(false);
       
-    // Convert base64 to File and submit for face matching (like upload)
     try {
-      // Handle both data URL format (data:image/...) and plain base64
       let imageData = base64Image;
       if (!base64Image.startsWith('data:')) {
         imageData = `data:image/jpeg;base64,${base64Image}`;
@@ -218,59 +245,50 @@ function VerificationFlow() {
           return res.blob();
         })
         .then(blob => {
-          console.log('✅ Converted to blob, size:', blob.size);
           if (blob.size === 0) {
             throw new Error('Blob is empty');
           }
           const file = new File([blob], 'face.jpg', { type: 'image/jpeg' });
           setFaceFile(file);
-          console.log('📤 Submitting face image for matching via upload endpoint...');
           faceMutation.mutate(file);
         })
-        .catch(err => {
-          console.error('❌ Error converting face image to File, trying base64 fallback:', err);
-          // Fallback: try using base64 directly
-          console.log('🔄 Attempting base64 direct submission...');
+        .catch(() => {
           const cleanBase64 = base64Image.includes(',') 
             ? base64Image.split(',')[1] 
             : base64Image;
           
-          // Fallback: try using base64 directly via API
           matchFacesWithBase64(sessionId!, cleanBase64)
             .then(response => {
-              console.log('✅ Face match successful via base64');
               setFaceMatchResult(response.match_result);
               refetch();
-              // Skip liveness if scenario is 'standard'
               if (includesLiveness) {
                 setCurrentStep('liveness-check');
               } else {
-                // Add a small delay to ensure data is saved before navigation
                 setTimeout(() => {
                   navigate(`/results/${sessionId}`);
                 }, 500);
               }
               setError(null);
             })
-            .catch(apiErr => {
-              console.error('❌ Base64 submission also failed:', apiErr);
-              setError(`Failed to process captured image: ${err.message}`);
+            .catch(() => {
+              setError('Failed to process captured image');
             });
         });
     } catch (err) {
-      console.error('❌ Error in handleFaceCameraCapture:', err);
       setError(`Failed to process captured image: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
-  const steps = includesLiveness 
+  const steps = isLivenessFirst
+    ? ['Liveness Check', 'Upload Document']
+    : includesLiveness 
     ? ['Upload Document', 'Face Matching', 'Liveness Check']
     : ['Upload Document', 'Face Matching'];
   const stepIndex = {
-    'document-upload': 0,
-    'face-match': 1,
-    'liveness-check': includesLiveness ? 2 : 1,
-    'results': includesLiveness ? 3 : 2,
+    'liveness-check': isLivenessFirst ? 0 : includesLiveness ? 2 : 1,
+    'document-upload': isLivenessFirst ? 1 : 0,
+    'face-match': isLivenessFirst ? 2 : 1,
+    'results': isLivenessFirst ? 2 : includesLiveness ? 3 : 2,
   }[currentStep];
 
   const isLoading =
@@ -378,7 +396,9 @@ function VerificationFlow() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Capture Your Document</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 1 of {steps.length}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Step {isLivenessFirst ? 2 : 1} of {steps.length}
+                    </p>
                   </div>
                 </div>
                 {!showDocumentCamera && !documentPreview && (
@@ -391,6 +411,17 @@ function VerificationFlow() {
                   </button>
                 )}
               </div>
+              
+              {isLivenessFirst && livenessImageData && (
+                <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-green-800 dark:text-green-300 font-semibold mb-2">
+                    ✅ Liveness Verified
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    Your liveness image will be used to match against the photo on your document.
+                  </p>
+                </div>
+              )}
               
               <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
                 Use Cyantech's smart camera to capture your government-issued ID with automatic quality checks, 
@@ -520,7 +551,7 @@ function VerificationFlow() {
             </div>
           )}
 
-          {currentStep === 'liveness-check' && includesLiveness && (
+          {currentStep === 'liveness-check' && (includesLiveness || isLivenessFirst) && (
             <div>
               <div className="flex items-center mb-6">
                 <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mr-4">
@@ -528,7 +559,9 @@ function VerificationFlow() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Liveness Check</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Final Step - Step {steps.length} of {steps.length}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {isLivenessFirst ? `Step 1 of ${steps.length}` : `Final Step - Step ${steps.length} of ${steps.length}`}
+                  </p>
         </div>
               </div>
               
@@ -539,6 +572,7 @@ function VerificationFlow() {
                 <p className="text-sm text-green-700 dark:text-green-400 leading-relaxed">
                   Cyantech Face SDK will verify you are physically present. Follow the on-screen instructions 
                   and make sure your face is well-lit and clearly visible.
+                  {isLivenessFirst && ' This image will be used for face matching with your document.'}
                 </p>
               </div>
               
@@ -602,6 +636,12 @@ function VerificationFlow() {
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.document_type}</p>
                   </div>
                 )}
+                {documentResult.document_name && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Document Name:</span>
+                          <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.document_name}</p>
+                  </div>
+                )}
                 {documentResult.nationality && (
                   <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Nationality:</span>
@@ -624,8 +664,20 @@ function VerificationFlow() {
                 )}
                 {documentResult.issuing_country && (
                   <div>
-                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing Country:</span>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing State Code:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_country}</p>
+                  </div>
+                )}
+                {documentResult.issuing_state_name && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing State Name:</span>
+                          <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_state_name}</p>
+                  </div>
+                )}
+                {documentResult.issuing_authority && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing Authority:</span>
+                          <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_authority}</p>
                   </div>
                 )}
                 {documentResult.age && (
@@ -777,7 +829,6 @@ function VerificationFlow() {
                                   alt="Captured Selfie"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
                           onError={(e) => {
-                                    console.error('Failed to load authenticity image:', faceMatchResult.authenticity_image_path);
                             e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
@@ -799,7 +850,6 @@ function VerificationFlow() {
                                   alt="Document Photo"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
                           onError={(e) => {
-                                    console.error('Failed to load etalon image:', faceMatchResult.etalon_image_path);
                             e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {

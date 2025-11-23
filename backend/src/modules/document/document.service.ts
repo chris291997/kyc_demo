@@ -3,14 +3,19 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import * as fs from 'fs';
 import { DocumentResult } from './document-result.entity';
 import { VerificationService } from '../verification/verification.service';
 import { StorageService } from '../storage/storage.service';
 
+// Constants
+const MATCH_THRESHOLD = 75;
+const REGULA_TIMEOUT = 30000;
+const FACE_IMAGE_FIELD_TYPE = 6;
+const AUTHENTICITY_ELEMENT_TYPE = 29;
+
 @Injectable()
 export class DocumentService {
-  private regulaUrl: string;
+  private readonly regulaUrl: string;
 
   constructor(
     @InjectRepository(DocumentResult)
@@ -84,118 +89,20 @@ export class DocumentService {
       // Update verification session
       await this.verificationService.update(sessionId, {
         document_verified: extractedData.authenticity_status === 'genuine',
-        status: portraitFile ? 'awaiting_face_match' : 'awaiting_face_match',
+        status: 'awaiting_face_match',
       });
 
       // Extract and save face match result if portrait was provided
       let faceMatchResult: any = null;
       if (portraitFile && regulaResponse) {
-        console.log('🔍 Looking for face match results in response...');
-        console.log(`📋 Response keys:`, Object.keys(regulaResponse));
+        let { matchScore, similarity } = this.extractFaceComparisonData(regulaResponse);
+        const { authenticityPercentage, etalonImageBase64, authenticityImageBase64 } = 
+          this.extractAuthenticityData(regulaResponse);
         
-        let matchScore = 0;
-        let similarity = 0;
-        let faceComparisonData: any = null;
-        
-        // When using extPortrait, face comparison results might be at different locations
-        // Check top-level fields first (common with extPortrait)
-        if (regulaResponse.AuthResult || regulaResponse.authResult) {
-          faceComparisonData = regulaResponse.AuthResult || regulaResponse.authResult;
-          matchScore = faceComparisonData?.faceComparison?.score || faceComparisonData?.score || faceComparisonData?.matchScore || 0;
-          similarity = faceComparisonData?.faceComparison?.similarity || faceComparisonData?.similarity || faceComparisonData?.similarityScore || 0;
-          console.log(`✅ Found AuthResult at top level:`, JSON.stringify(faceComparisonData, null, 2));
-        }
-        
-        // Check for FaceComparison at top level
-        if (!faceComparisonData && (regulaResponse.FaceComparison || regulaResponse.faceComparison)) {
-          faceComparisonData = regulaResponse.FaceComparison || regulaResponse.faceComparison;
-          matchScore = faceComparisonData?.score || faceComparisonData?.matchScore || 0;
-          similarity = faceComparisonData?.similarity || faceComparisonData?.similarityScore || 0;
-          console.log(`✅ Found FaceComparison at top level:`, JSON.stringify(faceComparisonData, null, 2));
-        }
-        
-        // Check containers in ContainerList
-        if (!faceComparisonData && regulaResponse?.ContainerList?.List) {
-          console.log(`📋 Total containers in response: ${regulaResponse.ContainerList.List.length}`);
-          const containers = regulaResponse.ContainerList.List;
-          
-          for (const container of containers) {
-            const resultType = container.result_type;
-            console.log(`📊 Container result_type: ${resultType}`);
-            
-            // Check for face comparison (result_type 13)
-            if (resultType === 13) {
-              faceComparisonData = container.FaceComparison || container.faceComparison || container;
-              matchScore = faceComparisonData?.score || faceComparisonData?.matchScore || container.score || 0;
-              similarity = faceComparisonData?.similarity || faceComparisonData?.similarityScore || container.similarity || 0;
-              console.log(`✅ Found face comparison (result_type 13):`, JSON.stringify(faceComparisonData, null, 2));
-              console.log(`   Score: ${matchScore}, Similarity: ${similarity}`);
-              break;
-            }
-            
-            // Also check for FaceComparison object in other containers
-            if (container.FaceComparison || container.faceComparison) {
-              faceComparisonData = container.FaceComparison || container.faceComparison;
-              matchScore = faceComparisonData?.score || faceComparisonData?.matchScore || 0;
-              similarity = faceComparisonData?.similarity || faceComparisonData?.similarityScore || 0;
-              console.log(`✅ Found FaceComparison in container (result_type ${resultType}):`, JSON.stringify(faceComparisonData, null, 2));
-              console.log(`   Score: ${matchScore}, Similarity: ${similarity}`);
-              break;
-            }
-          }
-        }
-        
-        // Extract AuthenticityCheckList data for face matching
-        let authenticityPercentage = 0;
-        let etalonImageBase64: string | null = null;
-        let authenticityImageBase64: string | null = null;
-
-        // Look for AuthenticityCheckList in the response
-        const containers = regulaResponse?.ContainerList?.List || [];
-        for (const container of containers) {
-          // Check if this container has AuthenticityCheckList
-          const authenticityCheckList = container.AuthenticityCheckList || container.authenticityCheckList;
-          
-          if (authenticityCheckList?.List) {
-            console.log('🔍 Found AuthenticityCheckList in container');
-            
-            // Iterate through the checklist items
-            for (const checklistItem of authenticityCheckList.List) {
-              if (checklistItem?.List) {
-                for (const element of checklistItem.List) {
-                  // Look for ElementType 29 (face matching authenticity)
-                  if (element.ElementType === 29) {
-                    console.log('✅ Found ElementType 29 (face matching authenticity)');
-                    authenticityPercentage = element.PercentValue || 0;
-                    etalonImageBase64 = element.EtalonImage?.image || element.etalonImage?.image || null;
-                    authenticityImageBase64 = element.Image?.image || element.image?.image || null;
-                    
-                    console.log(`📊 Authenticity Percentage: ${authenticityPercentage}%`);
-                    console.log(`🖼️ EtalonImage present: ${etalonImageBase64 ? 'Yes' : 'No'}`);
-                    console.log(`🖼️ AuthenticityImage present: ${authenticityImageBase64 ? 'Yes' : 'No'}`);
-                    
-                    // If face comparison data not found, use authenticity percentage as match score
-                    // This is the Regula API's way of providing face match confidence
-                    if (matchScore === 0 && similarity === 0 && authenticityPercentage > 0) {
-                      matchScore = authenticityPercentage;
-                      similarity = authenticityPercentage; // Use same value for similarity
-                      console.log(`✅ Using Authenticity Percentage (${authenticityPercentage}%) as match score`);
-                    }
-                    
-                    // If we found the data, break out of loops
-                    break;
-                  }
-                }
-                if (authenticityPercentage > 0) break;
-              }
-            }
-            if (authenticityPercentage > 0) break;
-          }
-        }
-
-        if (matchScore === 0 && similarity === 0) {
-          console.warn('⚠️ No face comparison results found in response. Check Regula API configuration.');
-          console.log('📄 Full response structure:', JSON.stringify(Object.keys(regulaResponse), null, 2));
+        // Use authenticity percentage as fallback if no match score found
+        if (matchScore === 0 && similarity === 0 && authenticityPercentage > 0) {
+          matchScore = authenticityPercentage;
+          similarity = authenticityPercentage;
         }
 
         // Save portrait image
@@ -206,79 +113,31 @@ export class DocumentService {
         );
 
         // Save EtalonImage and AuthenticityImage if available
-        let etalonImagePath: string | null = null;
-        let authenticityImagePath: string | null = null;
+        const [etalonImagePath, authenticityImagePath] = await Promise.all([
+          etalonImageBase64 
+            ? this.saveBase64AsFile(etalonImageBase64, 'etalon.jpg', 'authenticity', sessionId)
+            : Promise.resolve(null),
+          authenticityImageBase64
+            ? this.saveBase64AsFile(authenticityImageBase64, 'authenticity.jpg', 'authenticity', sessionId)
+            : Promise.resolve(null),
+        ]);
 
-        if (etalonImageBase64) {
-          try {
-            const etalonBuffer = Buffer.from(etalonImageBase64, 'base64');
-            const etalonFile: Express.Multer.File = {
-              buffer: etalonBuffer,
-              originalname: 'etalon.jpg',
-              mimetype: 'image/jpeg',
-              fieldname: 'etalon',
-              encoding: '7bit',
-              size: etalonBuffer.length,
-            } as Express.Multer.File;
-            
-            etalonImagePath = await this.storageService.saveFile(
-              etalonFile,
-              'authenticity',
-              sessionId,
-            );
-            console.log(`💾 Saved EtalonImage to: ${etalonImagePath}`);
-          } catch (error) {
-            console.error('❌ Failed to save EtalonImage:', error.message);
-          }
-        }
-
-        if (authenticityImageBase64) {
-          try {
-            const authBuffer = Buffer.from(authenticityImageBase64, 'base64');
-            const authFile: Express.Multer.File = {
-              buffer: authBuffer,
-              originalname: 'authenticity.jpg',
-              mimetype: 'image/jpeg',
-              fieldname: 'authenticity',
-              encoding: '7bit',
-              size: authBuffer.length,
-            } as Express.Multer.File;
-            
-            authenticityImagePath = await this.storageService.saveFile(
-              authFile,
-              'authenticity',
-              sessionId,
-            );
-            console.log(`💾 Saved AuthenticityImage to: ${authenticityImagePath}`);
-          } catch (error) {
-            console.error('❌ Failed to save AuthenticityImage:', error.message);
-          }
-        }
-
-        // Import FaceResult entity
-        const { FaceResult } = await import('../face/face-result.entity');
-        const { Repository } = await import('typeorm');
-        const faceResultRepo = this.documentRepository.manager.getRepository(FaceResult);
-
-        // Create face result - only set match_score and similarity_score if we have actual values
-        const faceResult = faceResultRepo.create({
-          session_id: sessionId,
-          match_status: matchScore > 0 && matchScore >= 75 ? 'matched' : 'not_matched',
-          match_score: matchScore > 0 ? matchScore : null,
-          similarity_score: similarity > 0 ? similarity : null,
-          selfie_image_path: portraitPath,
-          face_detected: matchScore > 0,
-          raw_match_response: regulaResponse,
-          authenticity_percentage: authenticityPercentage > 0 ? authenticityPercentage : null,
-          etalon_image_path: etalonImagePath,
-          authenticity_image_path: authenticityImagePath,
-        });
-
-        await faceResultRepo.save(faceResult);
+        // Save face match result
+        const faceResult = await this.saveFaceMatchResult(
+          sessionId,
+          portraitPath,
+          matchScore,
+          similarity,
+          authenticityPercentage,
+          etalonImagePath,
+          authenticityImagePath,
+          regulaResponse,
+        );
 
         // Update verification session with match results
+        const isMatched = matchScore > 0 && matchScore >= MATCH_THRESHOLD;
         await this.verificationService.update(sessionId, {
-          face_matched: matchScore > 0 && matchScore >= 75,
+          face_matched: isMatched,
           match_score: matchScore > 0 ? matchScore : null,
           status: 'awaiting_liveness',
         });
@@ -286,7 +145,7 @@ export class DocumentService {
         faceMatchResult = {
           match_score: matchScore > 0 ? matchScore : null,
           similarity: similarity > 0 ? similarity : null,
-          status: matchScore > 0 && matchScore >= 75 ? 'match' : 'no_match',
+          status: isMatched ? 'match' : 'no_match',
           authenticity_percentage: authenticityPercentage > 0 ? authenticityPercentage : null,
           etalon_image_path: etalonImagePath,
           authenticity_image_path: authenticityImagePath,
@@ -313,14 +172,10 @@ export class DocumentService {
     portraitBase64?: string,
   ): Promise<any> {
     try {
-      console.log('📡 Calling Regula Document Reader API...');
-      console.log(`📄 Document provided: Yes`);
-      console.log(`👤 Portrait provided: ${portraitBase64 ? 'Yes' : 'No'}`);
-
-      // Build request body following the exact format from result.json (lines 1-17)
       const requestBody: any = {
         processParam: {
           scenario: portraitBase64 ? 'FullAuth' : 'FullProcess',
+          resultTypesOutput: ['Status', 'Text', 'Images', 'MrzText', 'BarcodeText'],
         },
         List: [
           {
@@ -331,15 +186,11 @@ export class DocumentService {
         ],
       };
 
-      // If portrait is provided, configure face API for matching
-      // IMPORTANT: extPortrait must be at the TOP LEVEL, not in the List array
       if (portraitBase64) {
-        console.log('📸 Adding portrait for face matching');
         requestBody.processParam.authParams = {
           checkLiveness: false,
         };
         requestBody.processParam.useFaceApi = true;
-        // Add portrait as extPortrait at the root level (not in List array)
         requestBody.extPortrait = portraitBase64;
       }
 
@@ -352,65 +203,112 @@ export class DocumentService {
           },
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
-          timeout: 30000,
+          timeout: REGULA_TIMEOUT,
         },
       );
 
-      console.log('✅ Regula API Response received');
       return response.data;
     } catch (error) {
-      console.error('❌ Regula API Error:', error.response?.data || error.message);
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
-      }
       throw new Error(`Regula API Error: ${error.message}`);
     }
   }
 
   private extractDocumentData(regulaResponse: any): Partial<DocumentResult> {
-    const result: Partial<DocumentResult> = {
+    const result: Partial<DocumentResult> & {
+      document_name?: string | null;
+      issuing_state_name?: string | null;
+    } = {
       authenticity_status: 'unknown',
     };
 
     try {
-      console.log('📊 Starting document data extraction...');
-      
-      // Find containers in ContainerList.List
+      // Check top-level fields first
+      result.document_type = this.extractDocumentType(regulaResponse);
+      result.document_name = this.extractDocumentName(regulaResponse);
+
       const containers = regulaResponse?.ContainerList?.List || [];
-      console.log(`🔍 Found ${containers.length} containers in response`);
       
       let textContainer = null;
       let statusContainer = null;
       let imagesContainer = null;
+      let docVisualExtendedInfo = null;
+      let oneCandidate = null;
       
       for (const container of containers) {
-        // Text data can be in result_type 36 or 37
         if ((container.result_type === 36 || container.result_type === 37) && container.Text) {
           textContainer = container.Text;
-          console.log(`✅ Found Text container (result_type ${container.result_type})`);
         }
         if (container.result_type === 33 && container.Status) {
           statusContainer = container.Status;
-          console.log('✅ Found Status container (result_type 33)');
         }
         if (container.result_type === 6 && container.Images) {
           imagesContainer = container.Images;
-          console.log('✅ Found Images container (result_type 6)');
+        }
+        // Check for OneCandidate (result_type 9)
+        if (container.result_type === 9 && container.OneCandidate) {
+          oneCandidate = container.OneCandidate;
+        }
+        // Check for DocVisualExtendedInfo in result_type 36 container
+        if (container.result_type === 36 && container.DocVisualExtendedInfo) {
+          docVisualExtendedInfo = container.DocVisualExtendedInfo;
+        }
+        // Also check if DocVisualExtendedInfo is nested in Text container
+        if (container.Text?.DocVisualExtendedInfo) {
+          docVisualExtendedInfo = container.Text.DocVisualExtendedInfo;
         }
       }
 
-      // Extract text fields from Text.fieldList
+      // Extract from DocVisualExtendedInfo.pArrayFields FIRST (takes precedence)
+      if (docVisualExtendedInfo?.pArrayFields) {
+        for (const field of docVisualExtendedInfo.pArrayFields) {
+          const fieldType = field.fieldType;
+          const fieldName = field.fieldName;
+          
+          const trimmedValue = this.extractFieldValue(field);
+          if (!trimmedValue) continue;
+
+          // Check both fieldType and fieldName for Authority to ensure we get the right field
+          if ((fieldType === 24 || fieldName === 'Authority' || fieldName === 'Issuing Authority') && trimmedValue) {
+            // Trust the Regula response - if fieldType is 24 or fieldName indicates Authority, use it
+            result.issuing_authority = trimmedValue;
+          } else if ((fieldType === 1 || fieldName === 'Issuing State Code') && trimmedValue) {
+            // This is the code (PHL), not the name
+            // The name might be in valueList with VISUAL source
+            const visualValue = this.findVisualValue(field.valueList);
+            if (visualValue && visualValue !== trimmedValue) {
+              result.issuing_state_name = visualValue;
+            }
+          } else if ((fieldType === 38 || fieldName === 'Issuing State Name') && trimmedValue) {
+            // Issuing State Name (full country name like "Philippines")
+            result.issuing_state_name = trimmedValue;
+          } else if ((fieldType === 6 || fieldName === 'Place of Birth') && trimmedValue) {
+            result.place_of_birth = trimmedValue;
+          } else if ((fieldType === 11 || fieldName === 'Nationality') && trimmedValue) {
+            result.nationality = trimmedValue;
+          }
+        }
+      }
+
       const textFields = textContainer?.fieldList || [];
-      console.log(`📝 Extracting data from ${textFields.length} text fields...`);
 
       for (const field of textFields) {
         const fieldType = field.fieldType;
         const fieldName = field.fieldName;
         const value = field.value;
 
-        if (value) {
-          console.log(`   ✓ ${fieldName} (type=${fieldType}) = ${value}`);
+        // Skip issuing_authority if already set from DocVisualExtendedInfo
+        if (fieldType === 24 || fieldType === 38) {
+          if (result.issuing_authority && fieldType === 24) {
+            continue; // Skip, already set from DocVisualExtendedInfo
+          }
+        }
+
+        // Check fieldName for Authority or Issuing Authority (in case fieldType doesn't match)
+        if ((fieldName === 'Authority' || fieldName === 'Issuing Authority') && value && value.trim() && !result.issuing_authority) {
+          const trimmedValue = value.trim();
+          // Trust the Regula response - if fieldName indicates Authority, use it
+          result.issuing_authority = trimmedValue;
+          continue; // Skip the switch case for this field
         }
 
         switch (fieldType) {
@@ -419,6 +317,11 @@ export class DocumentService {
             break;
           case 1: // Issuing State Code
             result.issuing_country = value;
+            // Also check if there's a VISUAL source value in valueList for the state name
+            const visualValue = this.findVisualValue(field.valueList);
+            if (visualValue && visualValue !== value) {
+              result.issuing_state_name = visualValue;
+            }
             break;
           case 2: // Document Number
             result.document_number = value;
@@ -433,7 +336,9 @@ export class DocumentService {
             result.date_of_birth = this.parseDate(value);
             break;
           case 6: // Place of Birth
+            if (!result.place_of_birth) {
             result.place_of_birth = value;
+            }
             break;
           case 8: // Surname
             result.surname = value;
@@ -442,13 +347,24 @@ export class DocumentService {
             result.given_names = value;
             break;
           case 11: // Nationality
+            if (!result.nationality) {
             result.nationality = value;
+            }
             break;
           case 12: // Gender/Sex
             result.gender = value;
             break;
-          case 38: // Issuing State Name / Authority
-            result.issuing_authority = value;
+          case 24: // Authority (from Text container, but DocVisualExtendedInfo takes precedence)
+            if (!result.issuing_authority && value && value.trim()) {
+              // Trust the Regula response - fieldType 24 is Authority
+              result.issuing_authority = value.trim();
+            }
+            break;
+          case 38: // Issuing State Name
+            if (value && value.trim() && !result.issuing_state_name) {
+              // Trust the Regula response - fieldType 38 is Issuing State Name
+              result.issuing_state_name = value.trim();
+            }
             break;
           case 185: // Age
             result.age = value;
@@ -472,64 +388,65 @@ export class DocumentService {
         result.full_name = result.surname;
       }
 
-      // Extract document type from Status
-      if (statusContainer?.documentType) {
-        result.document_type = statusContainer.documentType;
+      // Extract document type from Status container
+      if (!result.document_type && statusContainer) {
+        result.document_type = this.extractDocumentType(statusContainer);
       }
 
-      // Extract authenticity status from Status.detailsOptical.overallStatus
+      // Extract document name from Status container
+      if (!result.document_name && statusContainer) {
+        result.document_name = this.extractDocumentName(statusContainer);
+      }
+
+      // Check OneCandidate for document_name and document_type
+      if (oneCandidate) {
+        if (!result.document_type) {
+          result.document_type = this.extractDocumentType(oneCandidate);
+        }
+        if (!result.document_name) {
+          result.document_name = this.extractDocumentName(oneCandidate);
+        }
+      }
+
+      // Also check in DocVisualExtendedInfo for document name
+      if (!result.document_name && docVisualExtendedInfo?.pArrayFields) {
+        for (const field of docVisualExtendedInfo.pArrayFields) {
+          if (field.fieldName === 'Document Name' || field.fieldName === 'DocumentName') {
+            const value = this.extractFieldValue(field);
+            if (value) {
+              result.document_name = value;
+              break;
+            }
+          }
+        }
+      }
+
       if (statusContainer?.detailsOptical?.overallStatus !== undefined) {
         const status = statusContainer.detailsOptical.overallStatus;
         result.authenticity_status =
           status === 1 ? 'genuine' : status === 0 ? 'fake' : 'unknown';
         result.authenticity_score = status === 1 ? 100 : status === 0 ? 0 : 50;
-        console.log(`📊 Authenticity: ${result.authenticity_status} (score=${result.authenticity_score})`);
       }
 
-      // Check MRZ verification
       result.mrz_verified = statusContainer?.detailsOptical?.mrz === 1;
-      
-      // Check barcode verification (from RFID details if available)
       result.barcode_verified = statusContainer?.detailsRFID?.overallStatus === 1;
 
-      console.log(`✅ MRZ Verified: ${result.mrz_verified}, Barcode Verified: ${result.barcode_verified}`);
-
-      // Extract face image if available from Images list
-      console.log('🔍 Looking for face image in Images container...');
       const imagesList = imagesContainer?.List || [];
-      console.log(`📊 Found ${imagesList.length} images`);
-      
       let faceImageBase64: string | null = null;
+      
       for (const imageField of imagesList) {
-        console.log(`🖼️ Image: fieldType=${imageField.fieldType}, light=${imageField.light}`);
-        
-        // Field type 6 is portrait/face image
-        if (imageField.fieldType === 6 && imageField.image) {
-          console.log('✅ Found portrait image (fieldType=6)');
+        if (imageField.fieldType === FACE_IMAGE_FIELD_TYPE && imageField.image) {
           faceImageBase64 = imageField.image;
           break;
         }
       }
       
-      if (!faceImageBase64) {
-        console.log('⚠️ No portrait image found in Regula response');
-      } else {
-        console.log('✅ Portrait image extracted successfully');
-        // Add to result as a temporary property (will be processed by caller)
+      if (faceImageBase64) {
         (result as any).face_image_base64 = faceImageBase64;
       }
 
-      console.log(`📦 Extracted data summary:`, {
-        full_name: result.full_name,
-        document_number: result.document_number,
-        nationality: result.nationality,
-        dob: result.date_of_birth,
-        expiry: result.expiry_date,
-        authenticity: result.authenticity_status,
-      });
-
     } catch (error) {
-      console.error('❌ Error extracting document data:', error);
+      // Error extracting document data, continue with partial data
     }
 
     return result;
@@ -555,6 +472,193 @@ export class DocumentService {
   async getFaceImagePath(sessionId: string): Promise<string | null> {
     const documentResult = await this.findBySessionId(sessionId);
     return documentResult?.face_image_path || null;
+  }
+
+  // Helper methods
+
+  private extractFaceComparisonData(regulaResponse: any): { matchScore: number; similarity: number } {
+    let matchScore = 0;
+    let similarity = 0;
+    let faceComparisonData: any = null;
+
+    // Check top-level fields first (common with extPortrait)
+    if (regulaResponse.AuthResult || regulaResponse.authResult) {
+      faceComparisonData = regulaResponse.AuthResult || regulaResponse.authResult;
+      matchScore = faceComparisonData?.faceComparison?.score || faceComparisonData?.score || faceComparisonData?.matchScore || 0;
+      similarity = faceComparisonData?.faceComparison?.similarity || faceComparisonData?.similarity || faceComparisonData?.similarityScore || 0;
+    }
+
+    // Check for FaceComparison at top level
+    if (!faceComparisonData && (regulaResponse.FaceComparison || regulaResponse.faceComparison)) {
+      faceComparisonData = regulaResponse.FaceComparison || regulaResponse.faceComparison;
+      matchScore = faceComparisonData?.score || faceComparisonData?.matchScore || 0;
+      similarity = faceComparisonData?.similarity || faceComparisonData?.similarityScore || 0;
+    }
+
+    // Check containers in ContainerList
+    if (!faceComparisonData && regulaResponse?.ContainerList?.List) {
+      for (const container of regulaResponse.ContainerList.List) {
+        // Check for face comparison (result_type 13)
+        if (container.result_type === 13) {
+          faceComparisonData = container.FaceComparison || container.faceComparison || container;
+          matchScore = faceComparisonData?.score || faceComparisonData?.matchScore || container.score || 0;
+          similarity = faceComparisonData?.similarity || faceComparisonData?.similarityScore || container.similarity || 0;
+          break;
+        }
+
+        // Also check for FaceComparison object in other containers
+        if (container.FaceComparison || container.faceComparison) {
+          faceComparisonData = container.FaceComparison || container.faceComparison;
+          matchScore = faceComparisonData?.score || faceComparisonData?.matchScore || 0;
+          similarity = faceComparisonData?.similarity || faceComparisonData?.similarityScore || 0;
+          break;
+        }
+      }
+    }
+
+    return { matchScore, similarity };
+  }
+
+  private extractAuthenticityData(regulaResponse: any): {
+    authenticityPercentage: number;
+    etalonImageBase64: string | null;
+    authenticityImageBase64: string | null;
+  } {
+    let authenticityPercentage = 0;
+    let etalonImageBase64: string | null = null;
+    let authenticityImageBase64: string | null = null;
+
+    const containers = regulaResponse?.ContainerList?.List || [];
+    for (const container of containers) {
+      const authenticityCheckList = container.AuthenticityCheckList || container.authenticityCheckList;
+
+      if (authenticityCheckList?.List) {
+        for (const checklistItem of authenticityCheckList.List) {
+          if (checklistItem?.List) {
+            for (const element of checklistItem.List) {
+              if (element.ElementType === AUTHENTICITY_ELEMENT_TYPE) {
+                authenticityPercentage = element.PercentValue || 0;
+                etalonImageBase64 = element.EtalonImage?.image || element.etalonImage?.image || null;
+                authenticityImageBase64 = element.Image?.image || element.image?.image || null;
+                break;
+              }
+            }
+            if (authenticityPercentage > 0) break;
+          }
+        }
+        if (authenticityPercentage > 0) break;
+      }
+    }
+
+    return { authenticityPercentage, etalonImageBase64, authenticityImageBase64 };
+  }
+
+  private async saveBase64AsFile(
+    base64Image: string,
+    filename: string,
+    folder: string,
+    sessionId: string,
+  ): Promise<string | null> {
+    try {
+      const buffer = Buffer.from(base64Image, 'base64');
+      const file: Express.Multer.File = {
+        buffer,
+        originalname: filename,
+        mimetype: 'image/jpeg',
+        fieldname: folder,
+        encoding: '7bit',
+        size: buffer.length,
+      } as Express.Multer.File;
+
+      return await this.storageService.saveFile(file, folder, sessionId);
+    } catch {
+      return null;
+    }
+  }
+
+  private async saveFaceMatchResult(
+    sessionId: string,
+    portraitPath: string,
+    matchScore: number,
+    similarity: number,
+    authenticityPercentage: number,
+    etalonImagePath: string | null,
+    authenticityImagePath: string | null,
+    regulaResponse: any,
+  ) {
+    const { FaceResult } = await import('../face/face-result.entity');
+    const faceResultRepo = this.documentRepository.manager.getRepository(FaceResult);
+
+    const isMatched = matchScore > 0 && matchScore >= MATCH_THRESHOLD;
+    const faceResultData = {
+      session_id: sessionId,
+      match_status: isMatched ? 'matched' : 'not_matched',
+      match_score: matchScore > 0 ? matchScore : null,
+      similarity_score: similarity > 0 ? similarity : null,
+      face_detected: matchScore > 0,
+      raw_match_response: regulaResponse,
+      authenticity_percentage: authenticityPercentage > 0 ? authenticityPercentage : null,
+      etalon_image_path: etalonImagePath,
+      authenticity_image_path: authenticityImagePath,
+    };
+
+    let faceResult = await faceResultRepo.findOne({
+      where: { session_id: sessionId },
+    });
+
+    if (faceResult) {
+      // Update existing face result - merge match data with existing liveness data
+      Object.assign(faceResult, {
+        ...faceResultData,
+        // Only update selfie_image_path if we have a new portrait (don't overwrite liveness image)
+        ...(portraitPath && { selfie_image_path: portraitPath }),
+      });
+    } else {
+      faceResult = faceResultRepo.create({
+        ...faceResultData,
+        selfie_image_path: portraitPath,
+      });
+    }
+
+    return await faceResultRepo.save(faceResult);
+  }
+
+  private extractFieldValue(field: any): string | null {
+    if (field.value?.trim()) {
+      return field.value.trim();
+    }
+
+    if (field.valueList?.length > 0) {
+      // Prefer VISUAL source
+      const visualValue = field.valueList.find((v: any) => v.source === 'VISUAL')?.value;
+      if (visualValue?.trim()) {
+        return visualValue.trim();
+      }
+      // Fallback to first value
+      if (field.valueList[0]?.value?.trim()) {
+        return field.valueList[0].value.trim();
+      }
+    }
+
+    return null;
+  }
+
+  private extractDocumentType(source: any): string | null {
+    return source?.dDescription || source?.DDescription || source?.documentType || source?.DocumentType || null;
+  }
+
+  private extractDocumentName(source: any): string | null {
+    return source?.DocumentName || source?.documentName || source?.document_name || null;
+  }
+
+  private findVisualValue(valueList: any[] | undefined): string | null {
+    if (!valueList || valueList.length === 0) return null;
+    
+    const visualValue = valueList.find(
+      (v: any) => v.source === 'VISUAL' && v.value?.trim() && v.value.trim().length > 3
+    );
+    
+    return visualValue?.value?.trim() || null;
   }
 }
 

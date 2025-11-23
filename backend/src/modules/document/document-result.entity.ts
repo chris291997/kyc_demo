@@ -17,73 +17,79 @@ export class DocumentResult {
   session_id: string;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  document_type: string;
+  document_type: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  document_type_code: string;
+  document_type_code: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  document_name: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })
-  document_number: string;
+  document_number: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  full_name: string;
+  full_name: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  given_names: string;
+  given_names: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  surname: string;
+  surname: string | null;
 
   @Column({ type: 'date', nullable: true })
-  date_of_birth: Date;
+  date_of_birth: Date | null;
 
   @Column({ type: 'varchar', length: 20, nullable: true })
-  gender: string;
+  gender: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  nationality: string;
+  nationality: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  issuing_country: string;
+  issuing_country: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  issuing_authority: string;
+  issuing_state_name: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  issuing_authority: string | null;
 
   @Column({ type: 'date', nullable: true })
-  issue_date: Date;
+  issue_date: Date | null;
 
   @Column({ type: 'date', nullable: true })
-  expiry_date: Date;
+  expiry_date: Date | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  face_image_path: string;
+  face_image_path: string | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
-  document_image_path: string;
+  document_image_path: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  place_of_birth: string;
+  place_of_birth: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  address: string;
+  address: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  personal_number: string;
+  personal_number: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  age: string;
+  age: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  authenticity_status: string;
+  authenticity_status: string | null;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  authenticity_score: number;
+  authenticity_score: number | null;
 
   @Column({ type: 'boolean', nullable: true })
-  mrz_verified: boolean;
+  mrz_verified: boolean | null;
 
   @Column({ type: 'boolean', nullable: true })
-  barcode_verified: boolean;
+  barcode_verified: boolean | null;
 
   @Column({ type: 'jsonb', nullable: true })
   raw_response: any;

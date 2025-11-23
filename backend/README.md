@@ -144,6 +144,14 @@ npm run migration:run
 npm run migration:revert
 ```
 
+**📚 For complete database schema, API documentation, and process flows, see:**
+- **[BACKEND_API_DOCUMENTATION.md](../BACKEND_API_DOCUMENTATION.md)** - Complete backend documentation with:
+  - Database schema with ER diagrams
+  - All API endpoints with request/response examples
+  - Process flow diagrams
+  - Data models
+  - Error handling
+
 ## Technologies
 
 - **NestJS** - Progressive Node.js framework

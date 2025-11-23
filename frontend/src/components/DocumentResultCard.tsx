@@ -166,6 +166,15 @@ export const DocumentResultCard: React.FC<DocumentResultCardProps> = ({
               </div>
             )}
 
+            {documentData.document_name && (
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Document Name</p>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {documentData.document_name}
+                </p>
+              </div>
+            )}
+
             {documentData.document_type_code && (
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Document Type Code</p>
@@ -222,9 +231,18 @@ export const DocumentResultCard: React.FC<DocumentResultCardProps> = ({
 
             {documentData.issuing_country && (
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Issuing Country</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Issuing State Code</p>
                 <p className="font-semibold text-gray-900 dark:text-white">
                   {documentData.issuing_country}
+                </p>
+              </div>
+            )}
+
+            {documentData.issuing_state_name && (
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Issuing State Name</p>
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {documentData.issuing_state_name}
                 </p>
               </div>
             )}

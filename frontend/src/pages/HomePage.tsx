@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, FileText, Users, Zap, Sparkles, ArrowRight, CheckCircle2, Shield, UserCheck } from 'lucide-react';
+import { ShieldCheck, FileText, Users, Zap, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { createVerificationSession } from '../services/api';
 import ThemeToggle from '../components/ThemeToggle';
 import type { VerificationScenario, VerificationScenarioConfig } from '../types';
@@ -34,6 +34,18 @@ function HomePage() {
       ],
       icon: '✅',
       color: 'green',
+    },
+    {
+      id: 'liveness-first',
+      name: 'Liveness-First Verification',
+      description: 'Liveness check first, then document verification with captured portrait (skips face match)',
+      features: [
+        'Liveness detection',
+        'Document authenticity check',
+        'Portrait from liveness used for face matching',
+      ],
+      icon: '🎯',
+      color: 'purple',
     },
   ];
 
@@ -152,7 +164,7 @@ function HomePage() {
               </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               {scenarios.map((scenario) => {
                 const isSelected = selectedScenario === scenario.id;
                 const colorClasses = {
@@ -168,7 +180,18 @@ function HomePage() {
                     text: 'text-green-600 dark:text-green-400',
                     button: 'bg-green-600 hover:bg-green-700',
                   },
-                }[scenario.color];
+                  purple: {
+                    border: 'border-purple-500',
+                    bg: 'bg-purple-50 dark:bg-purple-900/20',
+                    text: 'text-purple-600 dark:text-purple-400',
+                    button: 'bg-purple-600 hover:bg-purple-700',
+                  },
+                }[scenario.color] || {
+                  border: 'border-gray-500',
+                  bg: 'bg-gray-50 dark:bg-gray-900/20',
+                  text: 'text-gray-600 dark:text-gray-400',
+                  button: 'bg-gray-600 hover:bg-gray-700',
+                };
 
                 return (
                   <div
@@ -214,7 +237,7 @@ function HomePage() {
             <button
                 onClick={() => selectedScenario && handleStartVerification(selectedScenario)}
                 disabled={loading || !selectedScenario}
-                className={`${selectedScenario ? scenarios.find(s => s.id === selectedScenario)?.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700' : 'bg-gray-400'} text-white text-lg px-10 py-4 rounded-lg inline-flex items-center justify-center space-x-2 group transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`${selectedScenario ? scenarios.find(s => s.id === selectedScenario)?.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' : scenarios.find(s => s.id === selectedScenario)?.color === 'purple' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700' : 'bg-gray-400'} text-white text-lg px-10 py-4 rounded-lg inline-flex items-center justify-center space-x-2 group transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {loading ? (
                 <>

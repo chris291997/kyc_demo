@@ -56,8 +56,8 @@ export class FaceController {
   ) {
     const { sessionId, imageBase64, livenessResult } = body;
     
-    if (!sessionId) {
-      throw new BadRequestException('Session ID is required');
+    if (!sessionId || sessionId.trim() === '') {
+      throw new BadRequestException('Session ID is required and cannot be empty');
     }
 
     let savedPath: string | null = null;

@@ -28,6 +28,11 @@ export class FaceService {
     imagePath: string | null = null,
   ) {
     try {
+      // Validate sessionId
+      if (!sessionId || sessionId.trim() === '') {
+        throw new BadRequestException('Session ID is required and cannot be empty');
+      }
+
       // The Face SDK web component returns minimal data: { transactionId, status, tag }
       // We use the data provided by the frontend directly
       
@@ -49,14 +54,17 @@ export class FaceService {
       });
 
       if (faceResult) {
+        // Update existing face result - ensure session_id is preserved
         Object.assign(faceResult, {
+          session_id: sessionId, // Explicitly preserve session_id
           ...(imagePath && { selfie_image_path: imagePath }),
           raw_liveness_response: finalLivenessResult,
           ...livenessData,
         });
       } else {
+        // Create new face result - explicitly set session_id
         faceResult = this.faceRepository.create({
-          session_id: sessionId,
+          session_id: sessionId, // Explicitly set session_id
           selfie_image_path: imagePath,
           raw_liveness_response: finalLivenessResult,
           ...livenessData,
@@ -86,7 +94,6 @@ export class FaceService {
         liveness_metadata: livenessData.liveness_metadata,
       };
     } catch (error) {
-      console.error('Error saving liveness result:', error.message);
       throw new BadRequestException(
         `Failed to save liveness result: ${error.message}`,
       );
@@ -216,9 +223,6 @@ export class FaceService {
    */
   async fetchLivenessFromTransactionId(transactionId: string): Promise<any> {
     try {
-      const url = `${this.regulaFaceUrl}/api/v2/liveness?transactionId=${transactionId}`;
-      console.log(`🔍 Fetching liveness result from Regula API: GET ${url}`);
-      
       const response = await axios.get(
         `${this.regulaFaceUrl}/api/v2/liveness`,
         {
@@ -229,15 +233,8 @@ export class FaceService {
         },
       );
 
-      console.log('✅ Successfully fetched liveness result from Regula API');
-      console.log('📋 Regula API response:', JSON.stringify(response.data, null, 2));
       return response.data;
     } catch (error) {
-      console.error('❌ Regula Liveness 2.0 Fetch Error:', error.message);
-      if (error.response) {
-        console.error('❌ Response status:', error.response.status);
-        console.error('❌ Response data:', error.response.data);
-      }
       throw new Error(`Failed to fetch liveness result from Regula API: ${error.message}`);
     }
   }
@@ -264,7 +261,6 @@ export class FaceService {
 
       return response.data;
     } catch (error) {
-      console.error('Regula Liveness Error:', error.message);
       throw new Error(`Regula Liveness API Error: ${error.message}`);
     }
   }
@@ -291,7 +287,6 @@ export class FaceService {
 
       return response.data;
     } catch (error) {
-      console.error('Regula Match Error:', error.message);
       throw new Error(`Regula Match API Error: ${error.message}`);
     }
   }
@@ -515,7 +510,6 @@ export class FaceService {
         result.liveness_status = null;
       }
     } catch (error) {
-      console.error('Error extracting liveness data:', error.message);
       result.liveness_status = null;
     }
 
@@ -552,7 +546,7 @@ export class FaceService {
           result.match_score >= 75 ? 'matched' : 'not_matched';
       }
     } catch (error) {
-      console.error('Error extracting match data:', error);
+      // Error extracting match data, keep default values
     }
 
     return result;

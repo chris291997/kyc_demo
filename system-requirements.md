@@ -33,6 +33,37 @@ This document outlines the complete requirements for building a KYC demo applica
 - **Required**: License file
 - **Purpose**: Face liveness detection, face matching/comparison
 
+### Service Dependencies Diagram
+
+```mermaid
+graph TD
+    subgraph External["🌍 External Services"]
+        License[Regula License Files]
+    end
+    
+    subgraph DockerServices["🐳 Docker Services"]
+        DocReader[Document Reader SDK<br/>Port 8080<br/>3.5GB RAM]
+        FaceSDK[Face SDK<br/>Port 8081<br/>4.5GB RAM]
+        Backend[Backend API<br/>Port 4000<br/>512MB RAM]
+        Frontend[Frontend UI<br/>Port 3000]
+    end
+    
+    subgraph HostServices["🖥️ Host Services"]
+        PostgreSQL[(PostgreSQL<br/>Port 5432)]
+    end
+    
+    License --> DocReader
+    License --> FaceSDK
+    Backend --> DocReader
+    Backend --> FaceSDK
+    Backend --> PostgreSQL
+    Frontend --> Backend
+    
+    style DockerServices fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    style HostServices fill:#f59e0b,stroke:#d97706,color:#fff
+    style External fill:#e0e7ff,stroke:#6366f1
+```
+
 ### 2. Application Stack
 
 #### Backend (NestJS)
@@ -54,42 +85,110 @@ This document outlines the complete requirements for building a KYC demo applica
 
 ## System Architecture
 
+### High-Level Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Client["🌐 Client Layer"]
+        Browser[Web Browser<br/>Port 3000]
+    end
+    
+    subgraph Frontend["⚛️ Frontend (React + Vite)"]
+        UI[User Interface<br/>- Document Upload<br/>- Camera Capture<br/>- Results Display]
+    end
+    
+    subgraph Backend["🔧 Backend (NestJS)"]
+        API[REST API<br/>Port 4000]
+        Logic[Business Logic<br/>- Session Management<br/>- Validation<br/>- Orchestration]
+    end
+    
+    subgraph Database["💾 Database"]
+        PG[(PostgreSQL<br/>Port 5432<br/>Local Install)]
+    end
+    
+    subgraph Services["🔌 Regula Services (Docker)"]
+        DocReader[Document Reader SDK<br/>Port 8080<br/>- Document Validation<br/>- Data Extraction<br/>- Face Extraction]
+        FaceSDK[Face SDK<br/>Port 8081<br/>- Liveness Detection<br/>- Face Matching]
+    end
+    
+    Browser -->|HTTP| UI
+    UI -->|REST API| API
+    API --> Logic
+    Logic -->|TypeORM| PG
+    Logic -->|HTTP| DocReader
+    Logic -->|HTTP| FaceSDK
+    
+    style Frontend fill:#3b82f6,stroke:#1e40af,color:#fff
+    style Backend fill:#10b981,stroke:#059669,color:#fff
+    style Database fill:#f59e0b,stroke:#d97706,color:#fff
+    style Services fill:#8b5cf6,stroke:#7c3aed,color:#fff
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         Frontend                             │
-│          React + TypeScript + Vite (Port 3000)              │
-│  - Document upload UI                                       │
-│  - Camera capture for liveness                              │
-│  - Face match interface                                     │
-│  - Results visualization                                    │
-└────────────────────┬────────────────────────────────────────┘
-                     │ HTTP/REST
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Backend (NestJS)                          │
-│                      Port 4000                               │
-│  - REST API endpoints                                       │
-│  - Regula SDK integration                                   │
-│  - Business logic & validation                              │
-│  - Session management                                       │
-└─────┬──────────────┬──────────────┬────────────────────────┘
-      │              │              │
-      │              │              │ PostgreSQL connection
-      │              │              ▼
-      │              │         ┌─────────────────┐
-      │              │         │   PostgreSQL    │
-      │              │         │  (Local Install)│
-      │              │         │   Port 5432     │
-      │              │         └─────────────────┘
-      │              │
-      │ HTTP         │ HTTP
-      ▼              ▼
-┌──────────────┐  ┌──────────────────┐
-│  Document    │  │    Face SDK      │
-│  Reader SDK  │  │   Web Service    │
-│ Port 8080    │  │   Port 8081      │
-│  (Docker)    │  │    (Docker)      │
-└──────────────┘  └──────────────────┘
+
+### Network Architecture
+
+```mermaid
+graph LR
+    subgraph Host["🖥️ Host Machine"]
+        Browser[Browser<br/>localhost:3000]
+        PG[(PostgreSQL<br/>localhost:5432)]
+    end
+    
+    subgraph Docker["🐳 Docker Network"]
+        Frontend[Frontend Container<br/>:3000]
+        Backend[Backend Container<br/>:4000]
+        DocReader[DocReader Container<br/>:8080]
+        FaceSDK[Face SDK Container<br/>:8081]
+    end
+    
+    Browser -->|HTTP| Frontend
+    Frontend -->|HTTP| Backend
+    Backend -->|HTTP| DocReader
+    Backend -->|HTTP| FaceSDK
+    Backend -->|TCP| PG
+    
+    style Host fill:#e0e7ff,stroke:#6366f1
+    style Docker fill:#fef3c7,stroke:#f59e0b
+```
+
+### Data Flow Architecture
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant Backend
+    participant DocReader
+    participant FaceSDK
+    participant Database
+    
+    User->>Frontend: Upload Document
+    Frontend->>Backend: POST /verification/:id/images
+    Backend->>Database: Create/Update Session
+    Backend->>DocReader: Process Document
+    DocReader-->>Backend: Document Data
+    Backend->>Database: Save Document Result
+    Backend-->>Frontend: Document Result
+    
+    User->>Frontend: Capture Face
+    Frontend->>Backend: POST /verification/:id/images (portrait)
+    Backend->>DocReader: Match Faces
+    DocReader-->>Backend: Match Score
+    Backend->>Database: Save Face Result
+    Backend-->>Frontend: Face Match Result
+    
+    User->>Frontend: Complete Liveness
+    Frontend->>Backend: POST /api/face/liveness
+    Backend->>FaceSDK: Verify Liveness
+    FaceSDK-->>Backend: Liveness Status
+    Backend->>Database: Update Face Result
+    Backend-->>Frontend: Liveness Result
+    
+    User->>Frontend: View Results
+    Frontend->>Backend: GET /verification/:id/report
+    Backend->>Database: Fetch All Results
+    Database-->>Backend: Complete Data
+    Backend-->>Frontend: Verification Report
+    Frontend-->>User: Display Results
 ```
 
 ---
