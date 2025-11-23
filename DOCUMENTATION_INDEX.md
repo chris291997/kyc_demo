@@ -29,11 +29,12 @@ Complete guide to all documentation in the KYC Demo project.
 
 | Document | Description | Use Case |
 |----------|-------------|----------|
-| **[LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md)** | **Complete liveness guide** | Everything about liveness |
-| **[LIVENESS_SPOOF_DETECTION.md](./LIVENESS_SPOOF_DETECTION.md)** | Why "spoof" is detected | Understanding failures |
-| **[ARCHITECTURE_DECISION_LIVENESS.md](./ARCHITECTURE_DECISION_LIVENESS.md)** | Liveness architecture | Architecture decisions |
+| **[REGULA_SDK_COMPLETE_GUIDE.md](./REGULA_SDK_COMPLETE_GUIDE.md)** | **Complete SDK & Liveness Guide** | **All SDK and liveness documentation in one place** |
+| **[LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md)** | Complete liveness guide (legacy) | See complete guide above |
+| **[LIVENESS_SPOOF_DETECTION.md](./LIVENESS_SPOOF_DETECTION.md)** | Why "spoof" is detected (legacy) | See complete guide above |
+| **[ARCHITECTURE_DECISION_LIVENESS.md](./ARCHITECTURE_DECISION_LIVENESS.md)** | Liveness architecture (legacy) | See complete guide above |
 
-**👉 Start with LIVENESS_GUIDE.md** - it has everything you need!
+**👉 Start with REGULA_SDK_COMPLETE_GUIDE.md** - it has everything consolidated!
 
 ---
 
@@ -59,15 +60,17 @@ Complete guide to all documentation in the KYC Demo project.
 │   └── 📄 INSTALLATION.md                    ← Detailed setup
 │
 ├── 🔧 Setup & Integration
-│   ├── 📄 REGULA_SDK_INTEGRATION.md          ← SDK guide
-│   ├── 📄 FACE_SDK_SETUP.md                  ← Face SDK
+│   ├── 📄 REGULA_SDK_COMPLETE_GUIDE.md       ← **Complete SDK guide (all in one)**
+│   ├── 📄 REGULA_SDK_INTEGRATION.md          ← SDK guide (legacy)
+│   ├── 📄 FACE_SDK_SETUP.md                  ← Face SDK (legacy)
 │   ├── 📄 MIGRATIONS_SETUP.md                ← Database
 │   └── 📄 system-requirements.md             ← Technical specs
 │
 ├── 🧬 Liveness Detection
-│   ├── 📄 LIVENESS_GUIDE.md                  ← Main liveness guide
-│   ├── 📄 LIVENESS_SPOOF_DETECTION.md        ← Spoof understanding
-│   └── 📄 ARCHITECTURE_DECISION_LIVENESS.md  ← Architecture
+│   ├── 📄 REGULA_SDK_COMPLETE_GUIDE.md       ← **All liveness docs consolidated**
+│   ├── 📄 LIVENESS_GUIDE.md                  ← Main liveness guide (legacy)
+│   ├── 📄 LIVENESS_SPOOF_DETECTION.md        ← Spoof understanding (legacy)
+│   └── 📄 ARCHITECTURE_DECISION_LIVENESS.md  ← Architecture (legacy)
 │
 └── 🐛 Support
     └── 📄 TROUBLESHOOTING.md                 ← Problem solving
@@ -76,12 +79,25 @@ Complete guide to all documentation in the KYC Demo project.
 ### ❌ Removed Documentation (Duplicates/Outdated)
 
 The following files were **removed** during cleanup:
-- ~~`LIVENESS_FIX.md`~~ - Consolidated into LIVENESS_GUIDE.md
-- ~~`LIVENESS_FINAL_FIX.md`~~ - Consolidated into LIVENESS_GUIDE.md
-- ~~`LIVENESS_CODE_FIX.md`~~ - Consolidated into LIVENESS_GUIDE.md
-- ~~`LIVENESS_DISPLAY_FEATURE.md`~~ - Information in REGULA_SDK_INTEGRATION.md
-- ~~`COMPLETE_LIVENESS_CAPTURE.md`~~ - Consolidated into LIVENESS_GUIDE.md
+- ~~`LIVENESS_FIX.md`~~ - Consolidated into REGULA_SDK_COMPLETE_GUIDE.md
+- ~~`LIVENESS_FINAL_FIX.md`~~ - Consolidated into REGULA_SDK_COMPLETE_GUIDE.md
+- ~~`LIVENESS_CODE_FIX.md`~~ - Consolidated into REGULA_SDK_COMPLETE_GUIDE.md
+- ~~`LIVENESS_DISPLAY_FEATURE.md`~~ - Consolidated into REGULA_SDK_COMPLETE_GUIDE.md
+- ~~`COMPLETE_LIVENESS_CAPTURE.md`~~ - Consolidated into REGULA_SDK_COMPLETE_GUIDE.md
 - ~~`DEPLOYMENT_STATUS.md`~~ - Temporary status, info moved to README.md
+- ~~`LIVENESS_SPOOF_TROUBLESHOOTING.md`~~ - Consolidated into REGULA_SDK_COMPLETE_GUIDE.md
+
+### 📚 Consolidated Documentation
+
+The following files have been **consolidated** into `REGULA_SDK_COMPLETE_GUIDE.md`:
+- `REGULA_SDK_INTEGRATION.md` - General SDK integration
+- `FACE_SDK_SETUP.md` - Face SDK setup
+- `LIVENESS_GUIDE.md` - Complete liveness guide
+- `LIVENESS_FIRST_VERIFICATION.md` - Liveness-first flow
+- `LIVENESS_SPOOF_DETECTION.md` - Spoof detection understanding
+- `ARCHITECTURE_DECISION_LIVENESS.md` - Architecture decisions
+
+**Note:** These files are kept for reference but all content is now in the complete guide.
 
 ---
 
@@ -90,7 +106,7 @@ The following files were **removed** during cleanup:
 ### Path 1: Quick Setup (New User)
 1. **README.md** - Get overview
 2. **QUICK_START.md** - Follow 3-step setup
-3. **LIVENESS_GUIDE.md** - Understand liveness (important!)
+3. **REGULA_SDK_COMPLETE_GUIDE.md** - Understand SDK and liveness (important!)
 4. **TROUBLESHOOTING.md** - If issues arise
 
 **Time**: ~30 minutes + reading
@@ -101,22 +117,18 @@ The following files were **removed** during cleanup:
 1. **README.md** - Project overview
 2. **INSTALLATION.md** - Complete installation
 3. **system-requirements.md** - Technical requirements
-4. **REGULA_SDK_INTEGRATION.md** - SDK integration
-5. **FACE_SDK_SETUP.md** - Face SDK setup
-6. **MIGRATIONS_SETUP.md** - Database setup
-7. **LIVENESS_GUIDE.md** - Liveness detection
-8. **TROUBLESHOOTING.md** - Issue resolution
+4. **REGULA_SDK_COMPLETE_GUIDE.md** - Complete SDK integration and liveness
+5. **MIGRATIONS_SETUP.md** - Database setup
+6. **TROUBLESHOOTING.md** - Issue resolution
 
 **Time**: 2-3 hours
 
 ---
 
-### Path 3: Liveness Only (Understanding Liveness)
-1. **LIVENESS_GUIDE.md** - Complete guide
-2. **LIVENESS_SPOOF_DETECTION.md** - Why spoof happens
-3. **ARCHITECTURE_DECISION_LIVENESS.md** - Architecture details
+### Path 3: SDK & Liveness (Complete SDK Understanding)
+1. **REGULA_SDK_COMPLETE_GUIDE.md** - Complete SDK guide with all liveness documentation
 
-**Time**: 20-30 minutes
+**Time**: 30-45 minutes
 
 ---
 
@@ -140,17 +152,23 @@ The following files were **removed** during cleanup:
 - **Requirements**: system-requirements.md
 
 #### 🧬 Liveness
-- **Everything**: LIVENESS_GUIDE.md
-- **Why Spoof**: LIVENESS_SPOOF_DETECTION.md
-- **Architecture**: ARCHITECTURE_DECISION_LIVENESS.md
+- **Complete SDK Guide**: REGULA_SDK_COMPLETE_GUIDE.md - **Includes all liveness documentation**
+- **Everything**: LIVENESS_GUIDE.md (legacy - see complete guide)
+- **Why Spoof**: LIVENESS_SPOOF_DETECTION.md (legacy - see complete guide)
+- **Architecture**: ARCHITECTURE_DECISION_LIVENESS.md (legacy - see complete guide)
 
 #### 🔧 SDK Integration
-- **General SDK**: REGULA_SDK_INTEGRATION.md
-- **Face SDK**: FACE_SDK_SETUP.md
+- **Complete SDK Guide**: REGULA_SDK_COMPLETE_GUIDE.md - **All SDK documentation consolidated**
+- **General SDK**: REGULA_SDK_INTEGRATION.md (legacy - see complete guide)
+- **Face SDK**: FACE_SDK_SETUP.md (legacy - see complete guide)
 
-#### 💾 Database
+#### 💾 Database & Backend
+- **Backend API**: BACKEND_API_DOCUMENTATION.md - Complete backend API, schemas, and processes
 - **Migrations**: MIGRATIONS_SETUP.md
 - **Schema**: system-requirements.md
+
+#### ⚛️ Frontend
+- **Frontend Documentation**: FRONTEND_DOCUMENTATION.md - Complete frontend architecture, components, and flows
 
 #### 🐛 Problems
 - **Common Issues**: TROUBLESHOOTING.md
@@ -164,11 +182,12 @@ The following files were **removed** during cleanup:
 **November 22, 2025** - Major cleanup and consolidation
 
 ### Recent Changes
-- ✅ Removed 6 duplicate liveness documentation files
-- ✅ Created comprehensive LIVENESS_GUIDE.md
+- ✅ **Created REGULA_SDK_COMPLETE_GUIDE.md** - All SDK documentation consolidated into one comprehensive guide
+- ✅ Removed duplicate liveness documentation files
+- ✅ Added Mermaid diagrams to all key documentation
 - ✅ Updated all cross-references
 - ✅ Standardized documentation structure
-- ✅ Added this index document
+- ✅ Added visual representations (flowcharts, sequence diagrams, architecture diagrams)
 
 ### Contributing
 When adding new documentation:

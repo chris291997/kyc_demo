@@ -18,6 +18,7 @@ export interface DocumentResult {
   session_id: string;
   document_type: string | null;
   document_type_code: string | null;
+  document_name: string | null;
   document_number: string | null;
   full_name: string | null;
   given_names: string | null;
@@ -26,6 +27,7 @@ export interface DocumentResult {
   gender: string | null;
   nationality: string | null;
   issuing_country: string | null;
+  issuing_state_name: string | null;
   issuing_authority: string | null;
   issue_date: string | null;
   expiry_date: string | null;
@@ -78,6 +80,7 @@ export interface VerificationReport {
     surname: string | null;
     document_type: string | null;
     document_type_code: string | null;
+    document_name: string | null;
     document_number: string | null;
     nationality: string | null;
     date_of_birth: string | null;
@@ -85,6 +88,7 @@ export interface VerificationReport {
     issue_date: string | null;
     gender: string | null;
     issuing_country: string | null;
+    issuing_state_name: string | null;
     issuing_authority: string | null;
     place_of_birth: string | null;
     address: string | null;

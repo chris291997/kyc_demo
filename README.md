@@ -87,20 +87,23 @@ docker-compose up -d --build
 - **[INSTALLATION.md](./INSTALLATION.md)** - Complete installation walkthrough
 
 ### Integration & Setup
-- **[REGULA_SDK_INTEGRATION.md](./REGULA_SDK_INTEGRATION.md)** - Regula SDK integration guide
-- **[FACE_SDK_SETUP.md](./FACE_SDK_SETUP.md)** - Face SDK specific setup instructions
+- **[REGULA_SDK_COMPLETE_GUIDE.md](./REGULA_SDK_COMPLETE_GUIDE.md)** - **Complete Regula SDK guide (all SDK docs in one place)**
+- **[REGULA_SDK_INTEGRATION.md](./REGULA_SDK_INTEGRATION.md)** - Regula SDK integration (legacy)
+- **[FACE_SDK_SETUP.md](./FACE_SDK_SETUP.md)** - Face SDK setup (legacy)
 - **[MIGRATIONS_SETUP.md](./MIGRATIONS_SETUP.md)** - Database migrations guide
 
 ### Liveness Detection
-- **[LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md)** - Complete liveness detection guide
+- **[LIVENESS_GUIDE.md](./LIVENESS_GUIDE.md)** - Complete liveness detection guide (includes troubleshooting)
 - **[LIVENESS_SPOOF_DETECTION.md](./LIVENESS_SPOOF_DETECTION.md)** - Understanding spoof detection
 - **[ARCHITECTURE_DECISION_LIVENESS.md](./ARCHITECTURE_DECISION_LIVENESS.md)** - Liveness architecture decisions
 
 ### Support & Reference
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
 - **[system-requirements.md](./system-requirements.md)** - Technical specifications
-- **[backend/README.md](./backend/README.md)** - Backend API documentation
-- **[frontend/README.md](./frontend/README.md)** - Frontend documentation
+- **[BACKEND_API_DOCUMENTATION.md](./BACKEND_API_DOCUMENTATION.md)** - Complete backend API, database schemas, and process flows
+- **[FRONTEND_DOCUMENTATION.md](./FRONTEND_DOCUMENTATION.md)** - Complete frontend architecture, components, state management, and user flows
+- **[backend/README.md](./backend/README.md)** - Backend quick reference
+- **[frontend/README.md](./frontend/README.md)** - Frontend quick reference
 
 ---
 

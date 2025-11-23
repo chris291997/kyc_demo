@@ -5,7 +5,8 @@
 set -e
 
 # Set the port configuration
-export GUNICORN_CMD_ARGS="--bind 0.0.0.0:8080 --workers 1 --worker-class uvicorn.workers.UvicornWorker"
+# IMPORTANT: Must match the Docker EXPOSE port (41101)
+export GUNICORN_CMD_ARGS="--bind 0.0.0.0:41101 --workers 1 --worker-class uvicorn.workers.UvicornWorker"
 
 # Start the Face SDK service
 exec /opt/regula/face-rec-service/regface

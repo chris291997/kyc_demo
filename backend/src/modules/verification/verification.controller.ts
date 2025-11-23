@@ -80,35 +80,21 @@ export class VerificationController {
       throw new BadRequestException('No images provided');
     }
 
-    console.log(`📥 Processing ${files.length} file(s) for session ${id}`);
-    console.log(`📋 documentIndex: ${documentIndex}, faceIndex: ${faceIndex}`);
-
-    // Determine upload type based on indices
     let documentFile: Express.Multer.File | undefined;
     let portraitFile: Express.Multer.File | undefined;
 
-    // Check if this is a document-only upload
     if (documentIndex !== undefined && faceIndex === undefined) {
-      console.log('📄 Document-only upload detected');
       documentFile = files[0];
       portraitFile = undefined;
-    }
-    // Check if this is a portrait-only upload (for face matching step)
-    else if (faceIndex !== undefined && documentIndex === undefined) {
-      console.log('👤 Portrait-only upload detected');
-      
-      // Get existing document to perform face match
+    } else if (faceIndex !== undefined && documentIndex === undefined) {
       const existingDoc = await this.documentService.findBySessionId(id);
       if (!existingDoc) {
         throw new BadRequestException('Document must be uploaded first before portrait');
       }
 
-      // For portrait-only, we need to re-process with both document and portrait
-      // Load the original document file
       const fs = await import('fs');
       const documentBuffer = fs.readFileSync(existingDoc.document_image_path);
       
-      // Create a multer file object for the existing document
       documentFile = {
         buffer: documentBuffer,
         originalname: 'document.jpg',
@@ -118,26 +104,17 @@ export class VerificationController {
         size: documentBuffer.length,
       } as Express.Multer.File;
       
-      portraitFile = files[0]; // The newly uploaded portrait
-    }
-    // Both files uploaded together
-    else if (files.length === 2) {
-      console.log('📄👤 Document + Portrait upload detected');
+      portraitFile = files[0];
+    } else if (files.length === 2) {
       documentFile = files[parseInt(documentIndex || '0')];
       portraitFile = files[parseInt(faceIndex || '1')];
-    }
-    // Single file, assume it's document
-    else {
-      console.log('📄 Single file upload, assuming document');
+    } else {
       documentFile = files[0];
     }
 
     if (!documentFile) {
       throw new BadRequestException('Document image is required');
     }
-
-    console.log(`📄 Document: Yes`);
-    console.log(`👤 Portrait: ${portraitFile ? 'Yes' : 'No'}`);
 
     // Call document service with both files (portrait is optional)
     const result = await this.documentService.processDocument(

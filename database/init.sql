@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS document_results (
   -- Document Information
   document_type VARCHAR(100),
   document_type_code VARCHAR(50),
+  document_name VARCHAR(255),
   document_number VARCHAR(100),
   
   -- Personal Information
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS document_results (
   
   -- Document Details
   issuing_country VARCHAR(3),
+  issuing_state_name VARCHAR(255),
   issuing_authority VARCHAR(255),
   issue_date DATE,
   expiry_date DATE,

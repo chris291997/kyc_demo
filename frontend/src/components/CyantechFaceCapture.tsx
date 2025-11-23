@@ -111,7 +111,10 @@ export const CyantechFaceCapture: React.FC<CyantechFaceCaptureProps> = ({
               
               // Extract image from response
               let image: string | null = null;
-              if (response?.capture && Array.isArray(response.capture) && response.capture.length > 0) {
+              if (response?.images && Array.isArray(response.images) && response.images.length > 0) {
+                // NEW: Check images array first (Regula Face SDK 2.0 format)
+                image = response.images[0];
+              } else if (response?.capture && Array.isArray(response.capture) && response.capture.length > 0) {
                 image = response.capture[0];
               } else if (response?.portrait) {
                 image = response.portrait;

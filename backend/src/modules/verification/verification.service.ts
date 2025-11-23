@@ -71,35 +71,23 @@ export class VerificationService {
     const documentResult = verification.document_results?.[0];
     let faceResult = verification.face_results?.[0];
 
-    // If liveness data is missing but transactionId exists, fetch from Regula API
     if (faceResult && (!faceResult.liveness_status || faceResult.liveness_status === null) && faceResult.liveness_transaction_id) {
-      console.log(`🔍 Liveness data missing but transactionId exists (${faceResult.liveness_transaction_id}), fetching from Regula API...`);
       try {
-        // Fetch full liveness result from Regula API
         const livenessData = await this.faceService.fetchLivenessFromTransactionId(faceResult.liveness_transaction_id);
-        
-        // Extract and save liveness data
         const extractedData = this.faceService.extractLivenessDataPublic(livenessData);
         
-        // Update face result with fetched data
-        // The extractLivenessData already handles all the new fields, so we just merge
         Object.assign(faceResult, {
           ...extractedData,
           raw_liveness_response: livenessData,
         });
         
-        // Save updated face result using FaceService method
         await this.faceService.saveFaceResult(faceResult);
         
-        // Update verification session
         await this.update(id, {
           liveness_passed: extractedData.liveness_status === 'genuine',
           status: 'completed',
         });
-        
-        console.log('✅ Fetched and saved liveness data from Regula API');
       } catch (error) {
-        console.error('❌ Failed to fetch liveness data from Regula API:', error.message);
         // Continue with existing faceResult even if fetch fails
       }
     }
@@ -121,6 +109,7 @@ export class VerificationService {
             surname: documentResult.surname,
             document_type: documentResult.document_type,
             document_type_code: documentResult.document_type_code,
+            document_name: documentResult.document_name,
             document_number: documentResult.document_number,
             nationality: documentResult.nationality,
             date_of_birth: documentResult.date_of_birth,
@@ -128,6 +117,7 @@ export class VerificationService {
             issue_date: documentResult.issue_date,
             gender: documentResult.gender,
             issuing_country: documentResult.issuing_country,
+            issuing_state_name: documentResult.issuing_state_name,
             issuing_authority: documentResult.issuing_authority,
             place_of_birth: documentResult.place_of_birth,
             address: documentResult.address,
