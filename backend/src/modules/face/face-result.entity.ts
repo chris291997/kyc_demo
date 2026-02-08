@@ -61,6 +61,28 @@ export class FaceResult {
   @Column({ type: 'varchar', length: 500, nullable: true })
   authenticity_image_path: string;
 
+  // Liveness transaction fields (from Regula API)
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  liveness_transaction_id: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  liveness_tag: string;
+
+  @Column({ type: 'int', nullable: true })
+  liveness_type: number; // 0 = active, 1 = passive
+
+  @Column({ type: 'int', nullable: true })
+  liveness_estimated_age: number;
+
+  @Column({ type: 'int', nullable: true })
+  liveness_code: number;
+
+  @Column({ type: 'jsonb', nullable: true })
+  liveness_metadata: any; // elapsedTime, serverTime, ctx, etc.
+
+  @Column({ type: 'jsonb', nullable: true })
+  liveness_images: string[]; // Array of base64 images
+
   @CreateDateColumn()
   created_at: Date;
 

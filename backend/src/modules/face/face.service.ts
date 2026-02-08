@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +16,7 @@ export class FaceService {
     @InjectRepository(FaceResult)
     private faceRepository: Repository<FaceResult>,
     private configService: ConfigService,
+    @Inject(forwardRef(() => VerificationService))
     private verificationService: VerificationService,
   ) {
     this.regulaFaceUrl = this.configService.get('REGULA_FACE_SDK_URL');
@@ -27,8 +28,25 @@ export class FaceService {
     imagePath: string | null = null,
   ) {
     try {
-      // Extract liveness data from frontend result
-      const livenessData = this.extractLivenessData(livenessResult);
+      // Validate sessionId
+      if (!sessionId || sessionId.trim() === '') {
+        throw new BadRequestException('Session ID is required and cannot be empty');
+      }
+
+      // The Face SDK web component returns minimal data: { transactionId, status, tag }
+      // We use the data provided by the frontend directly
+      
+      let finalLivenessResult = livenessResult;
+      
+      // Check if we have at least the basic liveness data
+      if (!livenessResult?.transactionId) {
+        throw new BadRequestException(
+          'transactionId is required. Please ensure the liveness check completed successfully.',
+        );
+      }
+
+      // Extract liveness data from result
+      const livenessData = this.extractLivenessData(finalLivenessResult);
 
       // Save or update face result
       let faceResult = await this.faceRepository.findOne({
@@ -36,16 +54,19 @@ export class FaceService {
       });
 
       if (faceResult) {
+        // Update existing face result - ensure session_id is preserved
         Object.assign(faceResult, {
+          session_id: sessionId, // Explicitly preserve session_id
           ...(imagePath && { selfie_image_path: imagePath }),
-          raw_liveness_response: livenessResult,
+          raw_liveness_response: finalLivenessResult,
           ...livenessData,
         });
       } else {
+        // Create new face result - explicitly set session_id
         faceResult = this.faceRepository.create({
-          session_id: sessionId,
+          session_id: sessionId, // Explicitly set session_id
           selfie_image_path: imagePath,
-          raw_liveness_response: livenessResult,
+          raw_liveness_response: finalLivenessResult,
           ...livenessData,
         });
       }
@@ -53,19 +74,24 @@ export class FaceService {
       await this.faceRepository.save(faceResult);
 
       // Update verification session
+      const livenessPassed = livenessData.liveness_status === 'genuine';
       await this.verificationService.update(sessionId, {
-        liveness_passed: livenessData.liveness_status === 'genuine',
-        status: 'in_progress',
+        liveness_passed: livenessPassed,
+        status: 'completed',
       });
 
       return {
         success: true,
         session_id: sessionId,
-        liveness_result: {
-          status: livenessData.liveness_status,
-          score: livenessData.liveness_score,
-          confidence: livenessData.liveness_confidence,
-        },
+        liveness_status: livenessData.liveness_status,
+        liveness_score: livenessData.liveness_score,
+        liveness_confidence: livenessData.liveness_confidence,
+        liveness_code: livenessData.liveness_code,
+        liveness_transaction_id: livenessData.liveness_transaction_id,
+        liveness_tag: livenessData.liveness_tag,
+        liveness_type: livenessData.liveness_type,
+        liveness_estimated_age: livenessData.liveness_estimated_age,
+        liveness_metadata: livenessData.liveness_metadata,
       };
     } catch (error) {
       throw new BadRequestException(
@@ -138,19 +164,21 @@ export class FaceService {
       // Extract match data
       const matchData = this.extractMatchData(matchResponse);
 
-      // Update face result
+      // Update face result - save selfie image path for preview
       let faceResult = await this.faceRepository.findOne({
         where: { session_id: sessionId },
       });
 
       if (faceResult) {
         Object.assign(faceResult, {
+          selfie_image_path: image2Path, // Save selfie image path for preview
           raw_match_response: matchResponse,
           ...matchData,
         });
       } else {
         faceResult = this.faceRepository.create({
           session_id: sessionId,
+          selfie_image_path: image2Path, // Save selfie image path for preview
           raw_match_response: matchResponse,
           ...matchData,
         });
@@ -179,6 +207,42 @@ export class FaceService {
     }
   }
 
+  /**
+   * Fetch liveness result from Regula Face SDK Liveness 2.0 API using transactionId
+   * Uses GET /api/v2/liveness?transactionId={transactionId} to get authoritative data
+   * 
+   * Response format:
+   * - status: 0 = confirmed (genuine), 1 = not confirmed (spoof)
+   * - transactionId: UUID
+   * - tag: session identifier
+   * - code: result code
+   * - estimatedAge: single number (age estimate)
+   * - images: array of base64 images
+   * - metadata: object with elapsedTime, serverTime, ctx, etc.
+   * - type: 0 = active, 1 = passive
+   */
+  async fetchLivenessFromTransactionId(transactionId: string): Promise<any> {
+    try {
+      const response = await axios.get(
+        `${this.regulaFaceUrl}/api/v2/liveness`,
+        {
+          params: {
+            transactionId,
+          },
+          timeout: 30000,
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch liveness result from Regula API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Legacy method: Call Regula Face SDK for liveness detection (old API)
+   * Note: This uses the old /api/liveness endpoint which may not be available in Liveness 2.0
+   */
   private async callRegulaLiveness(filePath: string): Promise<any> {
     try {
       const formData = new FormData();
@@ -197,7 +261,6 @@ export class FaceService {
 
       return response.data;
     } catch (error) {
-      console.error('Regula Liveness Error:', error.message);
       throw new Error(`Regula Liveness API Error: ${error.message}`);
     }
   }
@@ -224,50 +287,240 @@ export class FaceService {
 
       return response.data;
     } catch (error) {
-      console.error('Regula Match Error:', error.message);
       throw new Error(`Regula Match API Error: ${error.message}`);
     }
   }
 
+  /**
+   * Extract liveness data from Regula Face SDK Liveness 2.0 response
+   * Supports both Liveness 2.0 format and legacy format for backward compatibility
+   * 
+   * Liveness 2.0 format (from GET /api/v2/liveness?transactionId={id}):
+   * - status: 0 = confirmed (genuine), 1 = not confirmed (spoof)
+   * - transactionId: UUID
+   * - tag: session identifier
+   * - code: result code
+   * - portrait: link to portrait image
+   * - video: link to session video
+   * - age: array of age estimates
+   * - metadata: additional metadata
+   * - type: 0 = active, 1 = passive
+   */
   private extractLivenessData(livenessResponse: any): Partial<FaceResult> {
     const result: Partial<FaceResult> = {
       liveness_status: 'unknown',
     };
 
     try {
-      // Extract liveness status
-      if (livenessResponse?.liveness) {
-        const livenessValue = livenessResponse.liveness;
+      // Check if result is nested in fullResponse (from frontend web component)
+      let responseData = livenessResponse;
+      if (livenessResponse?.fullResponse) {
+        responseData = livenessResponse.fullResponse;
+      }
+
+      // Handle Liveness 2.0 format (from Regula Face SDK Web API)
+      // status: 0 = confirmed (genuine), 1 = not confirmed (spoof)
+      if (responseData?.status !== undefined && responseData.status !== null) {
+        result.liveness_status = responseData.status === 0 ? 'genuine' : 'spoof';
+      }
+      else if (livenessResponse?.status !== undefined && livenessResponse.status !== null) {
+        result.liveness_status = livenessResponse.status === 0 ? 'genuine' : 'spoof';
+      }
+      else if (livenessResponse?.status === 0 || livenessResponse?.status === 1) {
+        result.liveness_status = livenessResponse.status === 0 ? 'genuine' : 'spoof';
+      }
+      // Check code field (Regula Face SDK Web Component uses code)
+      // code: 0 = genuine, non-zero = spoof or failed
+      else if (responseData?.code !== undefined && responseData.code !== null) {
+        result.liveness_status = responseData.code === 0 ? 'genuine' : 'spoof';
+      }
+      else if (livenessResponse?.code !== undefined && livenessResponse.code !== null) {
+        result.liveness_status = livenessResponse.code === 0 ? 'genuine' : 'spoof';
+      }
+      // Handle legacy format
+      else if (responseData?.liveness !== undefined || livenessResponse?.liveness !== undefined) {
+        const livenessValue = responseData?.liveness || livenessResponse?.liveness;
         result.liveness_status =
-          livenessValue === 'Passed' || livenessValue === 1
+          livenessValue === 'Passed' || livenessValue === 1 || livenessValue === 'genuine'
             ? 'genuine'
             : 'spoof';
       }
+      // Handle status as string
+      else if (responseData?.status === 'genuine' || responseData?.status === 'spoof' ||
+               livenessResponse?.status === 'genuine' || livenessResponse?.status === 'spoof') {
+        result.liveness_status = responseData?.status || livenessResponse?.status;
+      }
 
-      // Extract scores
-      if (livenessResponse?.score !== undefined) {
+      // Extract scores - Liveness 2.0 may not have explicit score/confidence
+      // but we can derive from status or use metadata
+      if (responseData?.score !== undefined) {
+        result.liveness_score = parseFloat(responseData.score);
+      } else if (livenessResponse?.score !== undefined) {
         result.liveness_score = parseFloat(livenessResponse.score);
+      } else if (responseData?.status === 0 || livenessResponse?.status === 0) {
+        // If status is 0 (genuine), set a high confidence score
+        result.liveness_score = 1.0;
+      } else if (responseData?.status === 1 || livenessResponse?.status === 1) {
+        // If status is 1 (spoof), set a low confidence score
+        result.liveness_score = 0.0;
       }
 
-      if (livenessResponse?.confidence !== undefined) {
+      if (responseData?.confidence !== undefined) {
+        result.liveness_confidence = parseFloat(responseData.confidence);
+      } else if (livenessResponse?.confidence !== undefined) {
         result.liveness_confidence = parseFloat(livenessResponse.confidence);
+      } else if (responseData?.status !== undefined || livenessResponse?.status !== undefined) {
+        // Derive confidence from status
+        const status = responseData?.status ?? livenessResponse?.status;
+        result.liveness_confidence = status === 0 ? 1.0 : 0.0;
       }
 
-      // Face detection info
-      if (livenessResponse?.faces) {
+      // Face detection info (legacy format)
+      if (responseData?.faces) {
+        result.face_detected = responseData.faces.length > 0;
+        result.face_count = responseData.faces.length;
+      } else if (livenessResponse?.faces) {
         result.face_detected = livenessResponse.faces.length > 0;
         result.face_count = livenessResponse.faces.length;
+      } else if (responseData?.portrait || livenessResponse?.portrait) {
+        // If portrait exists, face was detected
+        result.face_detected = true;
+        result.face_count = 1;
       }
 
-      // Face quality
-      if (livenessResponse?.quality !== undefined) {
+      // Face quality (legacy format)
+      if (responseData?.quality !== undefined) {
+        result.face_quality_score = parseFloat(responseData.quality);
+      } else if (livenessResponse?.quality !== undefined) {
         result.face_quality_score = parseFloat(livenessResponse.quality);
       }
+
+      // Extract transactionId (required for fetching full result later)
+      if (responseData?.transactionId) {
+        result.liveness_transaction_id = responseData.transactionId;
+      } else if (livenessResponse?.transactionId) {
+        result.liveness_transaction_id = livenessResponse.transactionId;
+      }
+
+      // Extract tag
+      if (responseData?.tag) {
+        result.liveness_tag = responseData.tag;
+      } else if (livenessResponse?.tag) {
+        result.liveness_tag = livenessResponse.tag;
+      }
+
+      // Extract liveness type (active, passive, etc.)
+      if (responseData?.livenessType) {
+        result.liveness_type = responseData.livenessType;
+      } else if (livenessResponse?.livenessType) {
+        result.liveness_type = livenessResponse.livenessType;
+      } else if (responseData?.type) {
+        result.liveness_type = responseData.type;
+      } else if (livenessResponse?.type) {
+        result.liveness_type = livenessResponse.type;
+      }
+
+      // Extract estimated age
+      if (responseData?.estimatedAge !== undefined) {
+        result.liveness_estimated_age = parseInt(responseData.estimatedAge);
+      } else if (livenessResponse?.estimatedAge !== undefined) {
+        result.liveness_estimated_age = parseInt(livenessResponse.estimatedAge);
+      } else if (responseData?.age !== undefined) {
+        result.liveness_estimated_age = parseInt(responseData.age);
+      } else if (livenessResponse?.age !== undefined) {
+        result.liveness_estimated_age = parseInt(livenessResponse.age);
+      }
+
+      // Extract liveness code
+      if (responseData?.code !== undefined) {
+        result.liveness_code = responseData.code;
+      } else if (livenessResponse?.code !== undefined) {
+        result.liveness_code = livenessResponse.code;
+      }
+
+      // Extract metadata
+      if (responseData?.metadata) {
+        result.liveness_metadata = responseData.metadata;
+      } else if (livenessResponse?.metadata) {
+        result.liveness_metadata = livenessResponse.metadata;
+      }
+
+      // Extract images (array of base64 images from liveness check)
+      if (responseData?.images && Array.isArray(responseData.images)) {
+        result.liveness_images = responseData.images;
+      } else if (livenessResponse?.images && Array.isArray(livenessResponse.images)) {
+        result.liveness_images = livenessResponse.images;
+      } else if (responseData?.capture && Array.isArray(responseData.capture)) {
+        result.liveness_images = responseData.capture;
+      } else if (livenessResponse?.capture && Array.isArray(livenessResponse.capture)) {
+        result.liveness_images = livenessResponse.capture;
+      }
+
+      // Extract type (0 = active, 1 = passive)
+      if (responseData?.type !== undefined) {
+        result.liveness_type = responseData.type;
+      } else if (livenessResponse?.type !== undefined) {
+        result.liveness_type = livenessResponse.type;
+      }
+
+      // Extract estimatedAge (single number, not array)
+      if (responseData?.estimatedAge !== undefined) {
+        result.liveness_estimated_age = parseInt(responseData.estimatedAge);
+      } else if (livenessResponse?.estimatedAge !== undefined) {
+        result.liveness_estimated_age = parseInt(livenessResponse.estimatedAge);
+      }
+
+      // Extract code
+      if (responseData?.code !== undefined) {
+        result.liveness_code = parseInt(responseData.code);
+      } else if (livenessResponse?.code !== undefined) {
+        result.liveness_code = parseInt(livenessResponse.code);
+      }
+
+      // Extract metadata (elapsedTime, serverTime, ctx, etc.)
+      if (responseData?.metadata) {
+        result.liveness_metadata = responseData.metadata;
+      } else if (livenessResponse?.metadata) {
+        result.liveness_metadata = livenessResponse.metadata;
+      }
+
+      // Extract images array (base64 images)
+      if (responseData?.images && Array.isArray(responseData.images)) {
+        result.liveness_images = responseData.images;
+      } else if (livenessResponse?.images && Array.isArray(livenessResponse.images)) {
+        result.liveness_images = livenessResponse.images;
+      }
+
+      // Age estimation (legacy format - array)
+      if (responseData?.age && Array.isArray(responseData.age) && responseData.age.length > 0) {
+        // Store age data in metadata if needed
+        if (!result.liveness_metadata) {
+          result.liveness_metadata = {};
+        }
+        result.liveness_metadata.age = responseData.age;
+      } else if (livenessResponse?.age && Array.isArray(livenessResponse.age) && livenessResponse.age.length > 0) {
+        if (!result.liveness_metadata) {
+          result.liveness_metadata = {};
+        }
+        result.liveness_metadata.age = livenessResponse.age;
+      }
+
+      // If we still have 'unknown' status, set to null
+      if (result.liveness_status === 'unknown') {
+        result.liveness_status = null;
+      }
     } catch (error) {
-      console.error('Error extracting liveness data:', error);
+      result.liveness_status = null;
     }
 
     return result;
+  }
+
+  /**
+   * Public method to extract liveness data (used by VerificationService)
+   */
+  extractLivenessDataPublic(livenessResponse: any): Partial<FaceResult> {
+    return this.extractLivenessData(livenessResponse);
   }
 
   private extractMatchData(matchResponse: any): Partial<FaceResult> {
@@ -293,7 +546,7 @@ export class FaceService {
           result.match_score >= 75 ? 'matched' : 'not_matched';
       }
     } catch (error) {
-      console.error('Error extracting match data:', error);
+      // Error extracting match data, keep default values
     }
 
     return result;
@@ -303,6 +556,42 @@ export class FaceService {
     return await this.faceRepository.findOne({
       where: { session_id: sessionId },
     });
+  }
+
+  /**
+   * Save or update face result (public method for use by VerificationService)
+   */
+  async saveFaceResult(faceResult: FaceResult): Promise<FaceResult> {
+    return await this.faceRepository.save(faceResult);
+  }
+
+  /**
+   * Store liveness transactionId (called when frontend completes liveness check)
+   * The full result will be fetched later when generating the report
+   */
+  async storeLivenessTransactionId(
+    sessionId: string,
+    transactionId: string,
+    tag?: string,
+  ): Promise<FaceResult> {
+    let faceResult = await this.faceRepository.findOne({
+      where: { session_id: sessionId },
+    });
+
+    if (faceResult) {
+      faceResult.liveness_transaction_id = transactionId;
+      if (tag) {
+        faceResult.liveness_tag = tag;
+      }
+    } else {
+      faceResult = this.faceRepository.create({
+        session_id: sessionId,
+        liveness_transaction_id: transactionId,
+        liveness_tag: tag,
+      });
+    }
+
+    return await this.faceRepository.save(faceResult);
   }
 }
 

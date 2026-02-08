@@ -171,3 +171,15 @@ rm -rf node_modules/.vite
 
 MIT
 
+---
+
+**📚 For complete frontend documentation, see:**
+- **[FRONTEND_DOCUMENTATION.md](../FRONTEND_DOCUMENTATION.md)** - Complete frontend documentation with:
+  - Component architecture and hierarchy
+  - State management (TanStack Query, React State, Context)
+  - Routing structure and navigation flows
+  - API integration patterns
+  - User flow diagrams
+  - Type definitions
+  - Styling system
+

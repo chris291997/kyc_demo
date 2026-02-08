@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Upload,
@@ -12,21 +12,30 @@ import {
 import {
   getVerificationSession,
   checkLivenessFromBase64,
+  matchFacesWithBase64,
+  API_URL,
 } from '../services/api';
 import api from '../services/api';
 import CyantechDocumentCapture from '../components/CyantechDocumentCapture';
 import CyantechFaceCapture from '../components/CyantechFaceCapture';
 import CyantechPortraitCapture from '../components/CyantechPortraitCapture';
 import UploadZone from '../components/UploadZone';
-import StepIndicator from '../components/StepIndicator';
 import ThemeToggle from '../components/ThemeToggle';
-import type { VerificationStep } from '../types';
+import type { VerificationStep, VerificationScenario } from '../types';
 
 function VerificationFlow() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [currentStep, setCurrentStep] = useState<VerificationStep>('document-upload');
+  // Get scenario from location state, default to 'full'
+  const scenario: VerificationScenario = (location.state?.scenario as VerificationScenario) || 'full';
+  const includesLiveness = scenario === 'full';
+  const isLivenessFirst = scenario === 'liveness-first';
+
+  const [currentStep, setCurrentStep] = useState<VerificationStep>(
+    isLivenessFirst ? 'liveness-check' : 'document-upload'
+  );
   const [error, setError] = useState<string | null>(null);
   
   // Results state
@@ -35,8 +44,9 @@ function VerificationFlow() {
   const [livenessResult, setLivenessResult] = useState<any>(null);
   
   // File states
-  const [documentFile, setDocumentFile] = useState<File | null>(null);
-  const [faceFile, setFaceFile] = useState<File | null>(null);
+  const [_documentFile, setDocumentFile] = useState<File | null>(null);
+  const [_faceFile, setFaceFile] = useState<File | null>(null);
+  const [livenessImageData, setLivenessImageData] = useState<string | null>(null);
   
   // Preview states
   const [documentPreview, setDocumentPreview] = useState<string | null>(null);
@@ -47,7 +57,7 @@ function VerificationFlow() {
   const [showFaceCamera, setShowFaceCamera] = useState(false);
 
   // Query verification session
-  const { data: session, refetch } = useQuery({
+  const { data: _session, refetch } = useQuery({
     queryKey: ['verification', sessionId],
     queryFn: () => getVerificationSession(sessionId!),
     enabled: !!sessionId,
@@ -68,11 +78,27 @@ function VerificationFlow() {
       
       return response.data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setDocumentResult(data.document_result);
       refetch();
-      setCurrentStep('face-match');
-      setError(null);
+      
+      if (isLivenessFirst && livenessImageData) {
+        try {
+          const livenessBlob = await fetch(livenessImageData).then(res => res.blob());
+          const livenessFile = new File([livenessBlob], 'liveness-portrait.jpg', { type: 'image/jpeg' });
+          await faceMutation.mutateAsync(livenessFile);
+        } catch (err) {
+          setError(`Failed to process liveness portrait: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      } else {
+        if (!isLivenessFirst) {
+          setCurrentStep('face-match');
+        }
+      }
+      
+      if (!isLivenessFirst || !livenessImageData) {
+        setError(null);
+      }
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -97,7 +123,21 @@ function VerificationFlow() {
     onSuccess: (data) => {
       setFaceMatchResult(data.face_match_result);
       refetch();
-      setCurrentStep('liveness-check');
+      
+      if (isLivenessFirst) {
+        setTimeout(() => {
+          navigate(`/results/${sessionId}`);
+        }, 500);
+      }
+      // Skip liveness if scenario is 'standard'
+      else if (includesLiveness) {
+        setCurrentStep('liveness-check');
+      } else {
+        // Add a small delay to ensure data is saved before navigation
+        setTimeout(() => {
+          navigate(`/results/${sessionId}`);
+        }, 500);
+      }
       setError(null);
     },
     onError: (err: Error) => {
@@ -105,17 +145,27 @@ function VerificationFlow() {
     },
   });
 
-  // Liveness check mutation
+  // Liveness check mutation - sends complete liveness result from SDK
   const livenessMutation = useMutation({
-    mutationFn: (data: { imageData: string; livenessResult?: any }) =>
-      checkLivenessFromBase64(sessionId!, data.imageData, data.livenessResult),
+    mutationFn: (data: { imageData: string; livenessResult: any }) => {
+      return checkLivenessFromBase64(sessionId!, data.imageData, data.livenessResult);
+    },
     onSuccess: (data) => {
       setLivenessResult(data);
-      refetch();
-      navigate(`/results/${sessionId}`);
+      refetch().then(() => {
+        // For liveness-first scenario, move to document upload with the liveness image
+        if (isLivenessFirst) {
+          setCurrentStep('document-upload');
+        } else {
+          // For full scenario, go to results
+          setTimeout(() => {
+            navigate(`/results/${sessionId}`);
+          }, 1000);
+        }
+      });
     },
     onError: (err: Error) => {
-      setError(err.message);
+      setError(`Failed to save liveness result: ${err.message}`);
     },
   });
 
@@ -139,14 +189,25 @@ function VerificationFlow() {
           handleDocumentUpload(file);
           setShowDocumentCamera(false);
         })
-        .catch(err => {
-          console.error('Error converting image:', err);
+        .catch(() => {
           setError('Failed to process captured image');
         });
     }
   };
 
   const handleLivenessCapture = (imageData: string, livenessResult?: any) => {
+    if (!livenessResult) {
+      setError('Liveness check completed but no result data. Please try again.');
+      return;
+    }
+    
+    setLivenessResult(livenessResult);
+    
+    if (isLivenessFirst) {
+      setLivenessImageData(imageData);
+      setFacePreview(imageData);
+    }
+    
     livenessMutation.mutate({ imageData, livenessResult });
   };
 
@@ -161,31 +222,73 @@ function VerificationFlow() {
   };
 
   const handleFaceCameraCapture = (images: string[]) => {
-    if (images && images.length > 0) {
+    if (!images || images.length === 0) {
+      setError('No image captured. Please try again.');
+      return;
+    }
+
       const base64Image = images[0];
       setFacePreview(base64Image);
+    setShowFaceCamera(false);
       
-      fetch(base64Image)
-        .then(res => res.blob())
+    try {
+      let imageData = base64Image;
+      if (!base64Image.startsWith('data:')) {
+        imageData = `data:image/jpeg;base64,${base64Image}`;
+      }
+      
+      fetch(imageData)
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`Failed to fetch image: ${res.statusText}`);
+          }
+          return res.blob();
+        })
         .then(blob => {
+          if (blob.size === 0) {
+            throw new Error('Blob is empty');
+          }
           const file = new File([blob], 'face.jpg', { type: 'image/jpeg' });
           setFaceFile(file);
-          setShowFaceCamera(false);
           faceMutation.mutate(file);
         })
-        .catch(err => {
-          console.error('Error converting face image:', err);
-          setError('Failed to process captured image');
+        .catch(() => {
+          const cleanBase64 = base64Image.includes(',') 
+            ? base64Image.split(',')[1] 
+            : base64Image;
+          
+          matchFacesWithBase64(sessionId!, cleanBase64)
+            .then(response => {
+              setFaceMatchResult(response.match_result);
+              refetch();
+              if (includesLiveness) {
+                setCurrentStep('liveness-check');
+              } else {
+                setTimeout(() => {
+                  navigate(`/results/${sessionId}`);
+                }, 500);
+              }
+              setError(null);
+            })
+            .catch(() => {
+              setError('Failed to process captured image');
+            });
         });
+    } catch (err) {
+      setError(`Failed to process captured image: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
-  const steps = ['Upload Document', 'Face Matching', 'Liveness Check'];
+  const steps = isLivenessFirst
+    ? ['Liveness Check', 'Upload Document']
+    : includesLiveness 
+    ? ['Upload Document', 'Face Matching', 'Liveness Check']
+    : ['Upload Document', 'Face Matching'];
   const stepIndex = {
-    'document-upload': 0,
-    'face-match': 1,
-    'liveness-check': 2,
-    'results': 3,
+    'liveness-check': isLivenessFirst ? 0 : includesLiveness ? 2 : 1,
+    'document-upload': isLivenessFirst ? 1 : 0,
+    'face-match': isLivenessFirst ? 2 : 1,
+    'results': isLivenessFirst ? 2 : includesLiveness ? 3 : 2,
   }[currentStep];
 
   const isLoading =
@@ -195,17 +298,17 @@ function VerificationFlow() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
+        {/* Header */}
       <header className="glass-effect sticky top-0 z-50 backdrop-blur-lg border-b border-gray-200/50 dark:border-gray-700/50">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => navigate('/')}
+          <button
+            onClick={() => navigate('/')}
               className="flex items-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors group"
-            >
+          >
               <ArrowLeft className="w-5 h-5 mr-2 group-hover:-translate-x-1 transition-transform" />
               <span className="font-medium">Back to Home</span>
-            </button>
+          </button>
             <ThemeToggle />
           </div>
         </div>
@@ -221,8 +324,8 @@ function VerificationFlow() {
               </div>
               <div>
                 <h1 className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
-                  Identity Verification
-                </h1>
+            Identity Verification
+          </h1>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   Session: <span className="font-mono">{sessionId}</span>
                 </p>
@@ -293,7 +396,9 @@ function VerificationFlow() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Capture Your Document</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 1 of 3</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Step {isLivenessFirst ? 2 : 1} of {steps.length}
+                    </p>
                   </div>
                 </div>
                 {!showDocumentCamera && !documentPreview && (
@@ -306,6 +411,17 @@ function VerificationFlow() {
                   </button>
                 )}
               </div>
+              
+              {isLivenessFirst && livenessImageData && (
+                <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-green-800 dark:text-green-300 font-semibold mb-2">
+                    ✅ Liveness Verified
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    Your liveness image will be used to match against the photo on your document.
+                  </p>
+                </div>
+              )}
               
               <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
                 Use Cyantech's smart camera to capture your government-issued ID with automatic quality checks, 
@@ -369,7 +485,7 @@ function VerificationFlow() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Capture Your Face</h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 2 of 3</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Step 2 of {steps.length}</p>
                   </div>
                 </div>
                 {!showFaceCamera && !facePreview && (
@@ -435,7 +551,7 @@ function VerificationFlow() {
             </div>
           )}
 
-          {currentStep === 'liveness-check' && (
+          {currentStep === 'liveness-check' && (includesLiveness || isLivenessFirst) && (
             <div>
               <div className="flex items-center mb-6">
                 <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center mr-4">
@@ -443,8 +559,10 @@ function VerificationFlow() {
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Liveness Check</h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Final Step - Step 3 of 3</p>
-                </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {isLivenessFirst ? `Step 1 of ${steps.length}` : `Final Step - Step ${steps.length} of ${steps.length}`}
+                  </p>
+        </div>
               </div>
               
               <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 mb-6">
@@ -454,6 +572,7 @@ function VerificationFlow() {
                 <p className="text-sm text-green-700 dark:text-green-400 leading-relaxed">
                   Cyantech Face SDK will verify you are physically present. Follow the on-screen instructions 
                   and make sure your face is well-lit and clearly visible.
+                  {isLivenessFirst && ' This image will be used for face matching with your document.'}
                 </p>
               </div>
               
@@ -469,8 +588,8 @@ function VerificationFlow() {
                     Verifying liveness...
                   </span>
                 </div>
-              )}
-            </div>
+                )}
+              </div>
           )}
             </div>
           </div>
@@ -480,45 +599,51 @@ function VerificationFlow() {
             <div className="flex-1 lg:w-1/3 lg:sticky lg:top-6 lg:self-start">
               <div className="space-y-4 lg:space-y-4">
                 {/* Document Results */}
-                {documentResult && (
+          {documentResult && (
                   <div className="card bg-blue-50 dark:bg-blue-900/10 border-2 border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-4">
                       <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       <h3 className="text-lg font-bold text-blue-900 dark:text-blue-300">Document Processed</h3>
-                    </div>
+              </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                      {documentResult.full_name && (
+                {documentResult.full_name && (
                         <div className="col-span-1">
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Full Name:</span>
                           <p className="text-gray-900 dark:text-white text-sm font-bold mt-1">{documentResult.full_name}</p>
-                        </div>
-                      )}
-                      {documentResult.given_names && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.given_names && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Given Names:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.given_names}</p>
-                        </div>
-                      )}
-                      {documentResult.surname && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.surname && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Surname:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.surname}</p>
-                        </div>
-                      )}
-                      {documentResult.document_number && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.document_number && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Document Number:</span>
                           <p className="text-gray-900 dark:text-white font-mono text-xs mt-1">{documentResult.document_number}</p>
-                        </div>
-                      )}
-                      {documentResult.document_type && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.document_type && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Document Type:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.document_type}</p>
-                        </div>
-                      )}
-                      {documentResult.nationality && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.document_name && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Document Name:</span>
+                          <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.document_name}</p>
+                  </div>
+                )}
+                {documentResult.nationality && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Nationality:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.nationality}</p>
                         </div>
@@ -535,77 +660,89 @@ function VerificationFlow() {
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Gender:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.gender}</p>
-                        </div>
-                      )}
-                      {documentResult.issuing_country && (
-                        <div>
-                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing Country:</span>
+                  </div>
+                )}
+                {documentResult.issuing_country && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing State Code:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_country}</p>
-                        </div>
-                      )}
-                      {documentResult.age && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.issuing_state_name && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing State Name:</span>
+                          <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_state_name}</p>
+                  </div>
+                )}
+                {documentResult.issuing_authority && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issuing Authority:</span>
+                          <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.issuing_authority}</p>
+                  </div>
+                )}
+                {documentResult.age && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Age:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.age} years</p>
-                        </div>
-                      )}
-                      {documentResult.issue_date && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.issue_date && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Issue Date:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">
                             {new Date(documentResult.issue_date).toLocaleDateString()}
                           </p>
-                        </div>
-                      )}
-                      {documentResult.expiry_date && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.expiry_date && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Expiry Date:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">
                             {new Date(documentResult.expiry_date).toLocaleDateString()}
                           </p>
-                        </div>
-                      )}
-                      {documentResult.place_of_birth && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.place_of_birth && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Place of Birth:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.place_of_birth}</p>
-                        </div>
-                      )}
-                      {documentResult.personal_number && (
-                        <div>
+                  </div>
+                )}
+                {documentResult.personal_number && (
+                  <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Personal Number:</span>
                           <p className="text-gray-900 dark:text-white font-mono text-xs mt-1">{documentResult.personal_number}</p>
-                        </div>
-                      )}
-                      {documentResult.address && (
+                  </div>
+                )}
+                {documentResult.address && (
                         <div className="col-span-1">
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Address:</span>
                           <p className="text-gray-900 dark:text-white text-xs mt-1">{documentResult.address}</p>
-                        </div>
-                      )}
+                  </div>
+                )}
                 </div>
 
                     {/* Authenticity Status */}
                     {documentResult.authenticity_status && (
                       <div className="mt-4 pt-4 border-t border-blue-300 dark:border-blue-800">
                         <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Authenticity:</span>
-                        <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1">
                           <p className={`font-bold text-sm ${
-                            documentResult.authenticity_status === 'genuine' 
+                      documentResult.authenticity_status === 'genuine' 
                               ? 'text-green-600 dark:text-green-400' 
-                              : documentResult.authenticity_status === 'fake'
+                        : documentResult.authenticity_status === 'fake'
                               ? 'text-red-600 dark:text-red-400'
                               : 'text-yellow-600 dark:text-yellow-400'
-                          }`}>
-                            {documentResult.authenticity_status?.toUpperCase() || 'UNKNOWN'}
-                          </p>
-                          {documentResult.authenticity_score && (
+                    }`}>
+                      {documentResult.authenticity_status?.toUpperCase() || 'UNKNOWN'}
+                    </p>
+                    {documentResult.authenticity_score && (
                             <span className="text-xs text-gray-600 dark:text-gray-400">
                               ({documentResult.authenticity_score}%)
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      </span>
+                    )}
+                  </div>
+                </div>
                     )}
 
                 {/* MRZ and Barcode Verification */}
@@ -626,56 +763,56 @@ function VerificationFlow() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
+          )}
 
                 {/* Face Match Results */}
-                {faceMatchResult && (
+          {faceMatchResult && (
                   <div className="card bg-purple-50 dark:bg-purple-900/10 border-2 border-purple-200 dark:border-purple-800">
-                    <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-4">
                       <CheckCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                       <h3 className="text-lg font-bold text-purple-900 dark:text-purple-300">Face Matched</h3>
-                    </div>
+              </div>
                     <div className="grid grid-cols-1 gap-3">
-                      <div>
+                <div>
                         <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Match Status:</span>
                         <p className={`font-bold text-sm mt-1 ${
-                          faceMatchResult.status === 'match' 
+                    faceMatchResult.status === 'match' 
                             ? 'text-green-600 dark:text-green-400' 
                             : 'text-red-600 dark:text-red-400'
-                        }`}>
-                          {faceMatchResult.status === 'match' ? '✓ MATCH' : '✗ NO MATCH'}
-                        </p>
-                      </div>
-                      {faceMatchResult.match_score !== undefined && faceMatchResult.match_score !== null && (
+                  }`}>
+                    {faceMatchResult.status === 'match' ? '✓ MATCH' : '✗ NO MATCH'}
+                  </p>
+                </div>
+                {faceMatchResult.match_score !== undefined && faceMatchResult.match_score !== null && (
                         <div>
                           <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Match Score:</span>
                           <div className="flex items-center gap-2 mt-1">
                             <p className="text-gray-900 dark:text-white font-bold text-sm">
-                              {faceMatchResult.match_score.toFixed(1)}%
-                            </p>
+                        {faceMatchResult.match_score.toFixed(1)}%
+                      </p>
                             <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div 
+                        <div 
                                 className={`h-2 rounded-full transition-all ${
-                                  faceMatchResult.match_score >= 75 
+                            faceMatchResult.match_score >= 75 
                                     ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
-                                    : faceMatchResult.match_score >= 50
+                              : faceMatchResult.match_score >= 50
                                     ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
                                     : 'bg-gradient-to-r from-red-500 to-red-600'
-                                }`}
-                                style={{ width: `${Math.min(faceMatchResult.match_score, 100)}%` }}
-                              ></div>
-                            </div>
-                          </div>
+                          }`}
+                          style={{ width: `${Math.min(faceMatchResult.match_score, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Threshold: 75%
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                    </p>
+                  </div>
+                )}
+              </div>
 
-                    {/* Authenticity Images Preview */}
-                    {(faceMatchResult.etalon_image_path || faceMatchResult.authenticity_image_path) && (
+              {/* Authenticity Images Preview */}
+              {(faceMatchResult.etalon_image_path || faceMatchResult.authenticity_image_path) && (
                       <div className="mt-4 pt-4 border-t border-purple-300 dark:border-purple-800">
                         <h4 className="text-xs font-bold text-purple-900 dark:text-purple-300 mb-2">
                           📸 Comparison
@@ -687,22 +824,21 @@ function VerificationFlow() {
                                 DOCUMENT
                               </p>
                               <div className="relative group">
-                                <img 
-                                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${faceMatchResult.authenticity_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.authenticity_image_path}`}
+                        <img 
+                                  src={`${API_URL}${faceMatchResult.authenticity_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.authenticity_image_path}`}
                                   alt="Captured Selfie"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
-                                  onError={(e) => {
-                                    console.error('Failed to load authenticity image:', faceMatchResult.authenticity_image_path);
-                                    e.currentTarget.style.display = 'none';
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
                                       parent.innerHTML = '<div class="w-full aspect-square rounded-lg border border-dashed border-purple-300 dark:border-purple-700 flex items-center justify-center bg-purple-100 dark:bg-purple-900/20"><span class="text-xs text-gray-500 dark:text-gray-400">N/A</span></div>';
                                     }
-                                  }}
-                                />
+                          }}
+                        />
                               </div>
-                            </div>
-                          )}
+                      </div>
+                    )}
                           {faceMatchResult.etalon_image_path && (
                             <div className="space-y-1">
                               <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide text-[10px]">
@@ -710,23 +846,133 @@ function VerificationFlow() {
                               </p>
                               <div className="relative group">
                                 <img 
-                                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}${faceMatchResult.etalon_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.etalon_image_path}`}
+                                  src={`${API_URL}${faceMatchResult.etalon_image_path.startsWith('/') ? '' : '/'}${faceMatchResult.etalon_image_path}`}
                                   alt="Document Photo"
                                   className="w-full rounded-lg border border-purple-300 dark:border-purple-700 shadow-md object-cover aspect-square"
-                                  onError={(e) => {
-                                    console.error('Failed to load etalon image:', faceMatchResult.etalon_image_path);
-                                    e.currentTarget.style.display = 'none';
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
                                       parent.innerHTML = '<div class="w-full aspect-square rounded-lg border border-dashed border-purple-300 dark:border-purple-700 flex items-center justify-center bg-purple-100 dark:bg-purple-900/20"><span class="text-xs text-gray-500 dark:text-gray-400">N/A</span></div>';
                                     }
-                                  }}
-                                />
+                          }}
+                        />
                               </div>
-                            </div>
-                          )}
-                        </div>
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+                {/* Liveness Detection Results */}
+          {livenessResult && (
+                  <div className="card bg-green-50 dark:bg-green-900/10 border-2 border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2 mb-4">
+                      <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <h3 className="text-lg font-bold text-green-900 dark:text-green-300">Liveness Detection</h3>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {/* Liveness Status */}
+                      {livenessResult.liveness_status && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Liveness Status:</span>
+                          <p className={`font-bold text-sm mt-1 ${
+                            livenessResult.liveness_status === 'genuine' 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : livenessResult.liveness_status === 'spoof'
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-yellow-600 dark:text-yellow-400'
+                          }`}>
+                            {livenessResult.liveness_status === 'genuine' ? '✓ LIVE PERSON' : 
+                             livenessResult.liveness_status === 'spoof' ? '✗ SPOOF DETECTED' : 
+                             '? UNKNOWN'}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Liveness Score */}
+                      {livenessResult.liveness_score !== undefined && livenessResult.liveness_score !== null && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Liveness Score:</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-gray-900 dark:text-white font-bold text-sm">
+                              {(livenessResult.liveness_score * 100).toFixed(1)}%
+                            </p>
+                            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full transition-all ${
+                                  livenessResult.liveness_score >= 0.75
+                                    ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                                    : livenessResult.liveness_score >= 0.5
+                                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                                    : 'bg-gradient-to-r from-red-500 to-red-600'
+                                }`}
+                                style={{ width: `${Math.min(livenessResult.liveness_score * 100, 100)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Liveness Confidence */}
+                      {livenessResult.liveness_confidence !== undefined && livenessResult.liveness_confidence !== null && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Confidence:</span>
+                          <p className="text-gray-900 dark:text-white font-bold text-sm mt-1">
+                            {(livenessResult.liveness_confidence * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Liveness Code */}
+                      {livenessResult.liveness_code !== undefined && livenessResult.liveness_code !== null && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Result Code:</span>
+                          <p className={`font-mono text-sm mt-1 ${
+                            livenessResult.liveness_code === 0 
+                              ? 'text-green-600 dark:text-green-400 font-bold' 
+                              : 'text-red-600 dark:text-red-400 font-bold'
+                          }`}>
+                            {livenessResult.liveness_code} {livenessResult.liveness_code === 0 ? '(Success)' : '(Failed)'}
+                          </p>
+              </div>
+                      )}
+
+                      {/* Estimated Age */}
+                      {livenessResult.liveness_estimated_age !== undefined && livenessResult.liveness_estimated_age !== null && (
+                <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Estimated Age:</span>
+                          <p className="text-gray-900 dark:text-white font-semibold text-sm mt-1">
+                            {livenessResult.liveness_estimated_age} years
+                          </p>
+                </div>
+                      )}
+
+                      {/* Transaction ID */}
+                      {livenessResult.liveness_transaction_id && (
+                  <div>
+                          <span className="text-gray-600 dark:text-gray-400 font-medium text-xs">Transaction ID:</span>
+                          <p className="text-gray-900 dark:text-white font-mono text-[10px] mt-1 break-all">
+                            {livenessResult.liveness_transaction_id}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Technical Details (Collapsible) */}
+                    {livenessResult.liveness_metadata && (
+                      <details className="mt-4 pt-4 border-t border-green-300 dark:border-green-800">
+                        <summary className="text-xs font-bold text-green-900 dark:text-green-300 mb-2 cursor-pointer hover:text-green-700 dark:hover:text-green-200">
+                          🔧 Technical Details
+                        </summary>
+                        <div className="mt-2 p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                          <pre className="text-[10px] text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap break-words">
+                            {JSON.stringify(livenessResult.liveness_metadata, null, 2)}
+                          </pre>
+                        </div>
+                      </details>
                     )}
                   </div>
                 )}

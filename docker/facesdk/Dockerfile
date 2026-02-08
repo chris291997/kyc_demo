@@ -56,16 +56,21 @@ RUN mkdir -p /app/storage /app/config
 # Copy configuration file
 COPY config.yml /app/config.yml
 
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Set working directory
 WORKDIR /app
 
-# Expose Face SDK port
-EXPOSE 8080
+# Expose Face SDK port (actual port the regface binary uses)
+EXPOSE 41101
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-  CMD curl -f http://localhost:8080/api/ping || exit 1
+  CMD curl -f http://localhost:41101/api/ping || exit 1
 
-# Start Face SDK service
+# Start Face SDK service via entrypoint script
 # Binary is located at /opt/regula/face-rec-service/regface
-CMD ["/opt/regula/face-rec-service/regface"]
+ENV GUNICORN_CMD_ARGS="--bind 0.0.0.0:8080"
+ENTRYPOINT ["/app/entrypoint.sh"]

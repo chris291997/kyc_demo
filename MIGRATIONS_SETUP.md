@@ -14,9 +14,16 @@ The database schema is properly configured with migrations that will run automat
   - Changes `nationality` column from VARCHAR(3) to VARCHAR(50)
   - Changes `issuing_country` column from VARCHAR(3) to VARCHAR(50)
 - Updates `verification_sessions` table:
-  - Adds additional status values to check constraint: `awaiting_face_match`, `document_verified`, `face_verified`
+  - Adds additional status values to check constraint: `awaiting_face_match`, `awaiting_liveness`, `document_verified`, `face_verified`
 
-### 2. AddAdditionalDocumentFields1763795071929
+### 2. FixFaceResultsConstraints1732268000000
+**Purpose:** Fixes match_status constraint on face_results table
+
+**Changes:**
+- Updates `face_results` table:
+  - Expands `match_status` constraint to include both variants: `match`, `no_match`, `matched`, `not_matched`, `unknown`, `not_checked`
+
+### 3. AddAdditionalDocumentFields1763795071929
 **Purpose:** Adds additional fields to document_results table
 
 **Changes:**
@@ -25,7 +32,7 @@ The database schema is properly configured with migrations that will run automat
 - Adds `personal_number` (VARCHAR 50)
 - Adds `age` (VARCHAR 50)
 
-### 3. AddAuthenticityFieldsToFaceResults1763806000000
+### 4. AddAuthenticityFieldsToFaceResults1763806000000
 **Purpose:** Adds authenticity fields to face_results table
 
 **Changes:**
@@ -129,4 +136,6 @@ If you encounter issues:
    ```powershell
    docker-compose exec postgres psql -U postgres -d kyc_demo -c "SELECT version();"
    ```
+
+
 

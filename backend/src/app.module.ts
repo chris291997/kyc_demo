@@ -34,7 +34,7 @@ import { StorageModule } from './modules/storage/storage.module';
           database: configService.get('DATABASE_NAME'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
-          migrationsRun: false, // Don't run migrations automatically - use synchronize in dev or run manually
+          migrationsRun: !useSynchronize, // Run migrations automatically when synchronize is disabled
           synchronize: useSynchronize, // Auto-create tables in development
           logging: isDevelopment,
         };

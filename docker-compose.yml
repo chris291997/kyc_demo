@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   regula-docreader:
     # Build from downloaded .deb package instead of Docker registry
@@ -38,7 +36,7 @@ services:
     image: kyc-facesdk:local
     container_name: kyc-facesdk
     ports:
-      - "8081:8080"
+      - "8081:41101"
     volumes:
       - ./regula-licenses/facesdk.license:/app/facesdk.license:ro
       - ./docker/facesdk/config.yml:/app/config.yml:ro
@@ -46,6 +44,7 @@ services:
     environment:
       - LICENSE_FILE=/app/facesdk.license
       - CONFIG_FILE=/app/config.yml
+      - PORT=8080
       - STORAGE_ENDPOINT=http://storage:9000
       - STORAGE_ACCESS_KEY=minioadmin
       - STORAGE_SECRET_KEY=minioadmin
@@ -60,7 +59,7 @@ services:
       storage:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:41101/api/ping"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -84,9 +83,10 @@ services:
       - DATABASE_PASSWORD=${DATABASE_PASSWORD:-postgres}
       - DATABASE_NAME=${DATABASE_NAME:-kyc_demo}
       - REGULA_DOC_READER_URL=http://regula-docreader:8080
-      - REGULA_FACE_SDK_URL=http://regula-face:8080
+      - REGULA_FACE_SDK_URL=http://regula-face:41101
       - PORT=4000
       - NODE_ENV=${NODE_ENV:-development}
+      - USE_SYNCHRONIZE=false
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
     volumes:
       - ./backend/src:/app/src

@@ -49,7 +49,7 @@ regula-db/*
 !regula-db/.gitkeep
 face-storage/*
 !face-storage/.gitkeep
-regula-licenses/*.license
+regula-licenses/
 docker/docreader/*.deb
 docker/facesdk/*.deb
 OL113415/
@@ -91,6 +91,20 @@ sample*.json
 # Project files
 project-structure.txt
 # Don't ignore all .txt files (keep documentation)
+
+# Documentation files
+TROUBLESHOOTING.md
+system-requirements.md
+REGULA_SDK_COMPLETE_GUIDE.md
+QUICK_START.md
+MIGRATIONS_SETUP.md
+INSTALLATION.md
+FRONTEND_DOCUMENTATION.md
+DOCUMENTATION_INDEX.md
+BACKEND_API_DOCUMENTATION.md
+
+# Scripts
+start.ps1
 
 # Cache
 .cache/

@@ -22,15 +22,42 @@ export class FaceController {
     private readonly documentService: DocumentService,
   ) {}
 
-  @Post('liveness')
-  async checkLiveness(
+  @Post('liveness/transaction')
+  async storeLivenessTransaction(
     @Body('sessionId') sessionId: string,
-    @Body('imageBase64') imageBase64?: string,
-    @Body('livenessResult') livenessResult?: any,
-    @UploadedFile() file?: Express.Multer.File,
+    @Body('transactionId') transactionId: string,
+    @Body('tag') tag?: string,
   ) {
     if (!sessionId) {
       throw new BadRequestException('Session ID is required');
+    }
+    if (!transactionId) {
+      throw new BadRequestException('Transaction ID is required');
+    }
+
+    const faceResult = await this.faceService.storeLivenessTransactionId(
+      sessionId,
+      transactionId,
+      tag,
+    );
+
+    return {
+      success: true,
+      session_id: sessionId,
+      transaction_id: transactionId,
+      message: 'Liveness transaction ID stored. Full result will be fetched when generating report.',
+    };
+  }
+
+  @Post('liveness')
+  async checkLiveness(
+    @Body() body: { sessionId: string; imageBase64?: string; livenessResult?: any },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const { sessionId, imageBase64, livenessResult } = body;
+    
+    if (!sessionId || sessionId.trim() === '') {
+      throw new BadRequestException('Session ID is required and cannot be empty');
     }
 
     let savedPath: string | null = null;

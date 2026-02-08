@@ -1,15 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VerificationSession } from './verification.entity';
 import { CreateVerificationDto } from './dto/create-verification.dto';
 import { UpdateVerificationDto } from './dto/update-verification.dto';
+import { StorageService } from '../storage/storage.service';
+import { FaceService } from '../face/face.service';
 
 @Injectable()
 export class VerificationService {
   constructor(
     @InjectRepository(VerificationSession)
     private verificationRepository: Repository<VerificationSession>,
+    private storageService: StorageService,
+    @Inject(forwardRef(() => FaceService))
+    private faceService: FaceService,
   ) {}
 
   async create(
@@ -64,7 +69,28 @@ export class VerificationService {
     const verification = await this.findOne(id);
 
     const documentResult = verification.document_results?.[0];
-    const faceResult = verification.face_results?.[0];
+    let faceResult = verification.face_results?.[0];
+
+    if (faceResult && (!faceResult.liveness_status || faceResult.liveness_status === null) && faceResult.liveness_transaction_id) {
+      try {
+        const livenessData = await this.faceService.fetchLivenessFromTransactionId(faceResult.liveness_transaction_id);
+        const extractedData = this.faceService.extractLivenessDataPublic(livenessData);
+        
+        Object.assign(faceResult, {
+          ...extractedData,
+          raw_liveness_response: livenessData,
+        });
+        
+        await this.faceService.saveFaceResult(faceResult);
+        
+        await this.update(id, {
+          liveness_passed: extractedData.liveness_status === 'genuine',
+          status: 'completed',
+        });
+      } catch (error) {
+        // Continue with existing faceResult even if fetch fails
+      }
+    }
 
     return {
       session_id: verification.id,
@@ -79,22 +105,66 @@ export class VerificationService {
       document_data: documentResult
         ? {
             full_name: documentResult.full_name,
+            given_names: documentResult.given_names,
+            surname: documentResult.surname,
             document_type: documentResult.document_type,
+            document_type_code: documentResult.document_type_code,
+            document_name: documentResult.document_name,
             document_number: documentResult.document_number,
             nationality: documentResult.nationality,
             date_of_birth: documentResult.date_of_birth,
             expiry_date: documentResult.expiry_date,
+            issue_date: documentResult.issue_date,
+            gender: documentResult.gender,
+            issuing_country: documentResult.issuing_country,
+            issuing_state_name: documentResult.issuing_state_name,
+            issuing_authority: documentResult.issuing_authority,
+            place_of_birth: documentResult.place_of_birth,
+            address: documentResult.address,
+            personal_number: documentResult.personal_number,
+            age: documentResult.age,
             authenticity_status: documentResult.authenticity_status,
             authenticity_score: documentResult.authenticity_score,
+            mrz_verified: documentResult.mrz_verified,
+            barcode_verified: documentResult.barcode_verified,
+            document_image_path: documentResult.document_image_path
+              ? this.storageService.getFileUrl(documentResult.document_image_path)
+              : null,
+            face_image_path: documentResult.face_image_path
+              ? this.storageService.getFileUrl(documentResult.face_image_path)
+              : null,
           }
         : null,
       face_data: faceResult
         ? {
             liveness_status: faceResult.liveness_status,
             liveness_score: faceResult.liveness_score,
+            liveness_confidence: faceResult.liveness_confidence,
+            liveness_transaction_id: faceResult.liveness_transaction_id,
+            liveness_tag: faceResult.liveness_tag,
+            liveness_type: faceResult.liveness_type,
+            liveness_estimated_age: faceResult.liveness_estimated_age,
+            liveness_code: faceResult.liveness_code,
+            liveness_metadata: faceResult.liveness_metadata,
+            liveness_images: faceResult.liveness_images,
             match_status: faceResult.match_status,
             match_score: faceResult.match_score,
             similarity_score: faceResult.similarity_score,
+            // Use the uploaded selfie image (from /verification/{id}/images endpoint)
+            selfie_image_path: faceResult.selfie_image_path
+              ? this.storageService.getFileUrl(faceResult.selfie_image_path)
+              : null,
+            // Also include document face image for comparison
+            document_face_image_path: documentResult?.face_image_path
+              ? this.storageService.getFileUrl(documentResult.face_image_path)
+              : null,
+            // Keep etalon/authenticity for reference (optional)
+            etalon_image_path: faceResult.etalon_image_path 
+              ? this.storageService.getFileUrl(faceResult.etalon_image_path)
+              : null,
+            authenticity_image_path: faceResult.authenticity_image_path
+              ? this.storageService.getFileUrl(faceResult.authenticity_image_path)
+              : null,
           }
         : null,
       overall_match_score: verification.match_score,
